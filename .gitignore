@@ -1,11 +1,36 @@
+# Python
 .venv/
+venv/
 __pycache__/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+
+# Secrets & keys — never commit
+.env
+*.key
+.pseudonymiser.key
+
+# Mapping database and exports (contain [encrypted] real PII)
+*.db
+*.sqlite*
+mappings*.csv
+
+# Raw inputs and pipeline outputs (contain PII)
 *.pdf
-temp_pdf_pages/
+out/
+output/
 output_processed/
 ocr_output/
 redacted_output/
+temp_pdf_pages/
 pdf_pages/
+debug_preprocessed/
+
+# Except: synthetic test fixtures are safe and required by the test suite
+!tests/fixtures/*.pdf
+
+# Local tooling
 Release-*/
-*.json
-*.txt
+.DS_Store
