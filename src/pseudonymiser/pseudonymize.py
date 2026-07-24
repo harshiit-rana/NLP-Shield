@@ -123,6 +123,19 @@ _SWEEP_STOPWORDS = {
 }
 
 
+_ACRONYM_SKIP_WORDS = {"of", "the", "and", "for", "in"}
+
+
+def _org_acronym(name: str) -> str | None:
+    """Derive an organisation's likely acronym ("Bureau of Internal
+    Revenue" -> "BIR"); None unless it has at least three letters."""
+    words = [w for w in re.split(r"[^A-Za-z]+", name)
+             if w and w.lower() not in _ACRONYM_SKIP_WORDS]
+    if len(words) < 3:
+        return None
+    return "".join(w[0].upper() for w in words)
+
+
 # Name-like entity types whose mapped values are safe to sweep verbatim.
 _SWEEPABLE_TYPES = {"PERSON", "LOCATION", "ORGANIZATION", "EMAIL_ADDRESS",
                     "IN_UPI"}
@@ -165,6 +178,18 @@ def sweep_person_fragments(text: str, store: MappingStore,
             if len(token) < 4 or token.lower() in _SWEEP_STOPWORDS:
                 continue
             pattern = re.compile(rf"\b{re.escape(token)}\b", re.IGNORECASE)
+            text, n = pattern.subn(pseudonym, text)
+            replaced += n
+
+    # Acronym pass: "Bureau of Internal Revenue" is often referenced as
+    # "BIR" in headers ("BIR-RR9A-..."); redact the derived acronym too.
+    # Uppercase-only match so ordinary words are never touched.
+    for entity_type, pseudonym, real in mappings:
+        if entity_type != "ORGANIZATION":
+            continue
+        acronym = _org_acronym(real)
+        if acronym:
+            pattern = re.compile(rf"\b{acronym}\b")
             text, n = pattern.subn(pseudonym, text)
             replaced += n
 

@@ -39,6 +39,9 @@ class DetectionConfig:
     use_gliner: bool = False
     gliner_model: str = "urchade/gliner_multi_pii-v1"
     gliner_threshold: float = 0.4
+    # Second NER pass over a case-normalised copy of ALL-CAPS text —
+    # models miss entities in shouting-case headers/signature blocks.
+    allcaps_second_pass: bool = True
     entities: list[str] = field(default_factory=lambda: [
         "PERSON", "ORGANIZATION", "EMAIL_ADDRESS", "PHONE_NUMBER",
         "LOCATION", "DATE_TIME",
@@ -69,6 +72,10 @@ class StoreConfig:
     # itself), env var PSEUDONYMISER_KEY_FILE, then this path. The key file
     # is created on first use and must stay gitignored.
     key_file: str = ".pseudonymiser.key"
+    # Also write a plaintext <doc>.mapping.csv (real value <-> pseudonym)
+    # next to each sanitized output for easy remapping. Contains raw PII —
+    # it stays local and the output directory is gitignored.
+    per_doc_csv: bool = True
 
 
 @dataclass

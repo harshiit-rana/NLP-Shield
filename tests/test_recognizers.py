@@ -66,6 +66,32 @@ class TestContextGatedNumbers:
         assert not hits(recognizers["BANK_ACCOUNT"], "a/c 12345678", "BANK_ACCOUNT")
 
 
+class TestNameWithInitial:
+    @pytest.fixture(scope="class")
+    def rec(self):
+        for r in build_custom_recognizers():
+            if r.name == "NameWithInitialRecognizer":
+                return r
+        raise AssertionError("NameWithInitialRecognizer not registered")
+
+    def test_matches_signature_names(self, rec):
+        assert hits(rec, "appeared BALDWIN P, SEE herein", "PERSON")
+        assert hits(rec, "MA. GRACIA B. JAVIER,", "PERSON")
+
+    def test_ignores_ordinary_abbreviations(self, rec):
+        assert not hits(rec, "Public Bidding No. 2017", "PERSON")
+        assert not hits(rec, "Doc. No. 77", "PERSON")
+
+
+class TestAllcapsNormalisation:
+    def test_length_preserved_and_words_titled(self):
+        from pseudonymiser.detect import _title_allcaps
+        src = "BUREAU OF INTERNAL REVENUE in Manila"
+        out = _title_allcaps(src)
+        assert len(out) == len(src)
+        assert out == "Bureau Of Internal Revenue in Manila"
+
+
 class TestVehicleRegistration:
     def test_matches_plate(self, recognizers):
         assert "MH12AB1234" in hits(recognizers["IN_VEHICLE_REGISTRATION"],

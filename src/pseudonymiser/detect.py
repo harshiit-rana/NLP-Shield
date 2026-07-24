@@ -127,6 +127,17 @@ def build_custom_recognizers() -> list[PatternRecognizer]:
         context=["cin", "corporate", "identity", "incorporation", "registration"],
     ))
 
+    # Signature/notary blocks list names as "BALDWIN P. SEE" — a first
+    # name, single initial, surname. NER regularly merges or misses these
+    # in noisy all-caps context, so match the shape directly.
+    recognizers.append(PatternRecognizer(
+        supported_entity="PERSON",
+        name="NameWithInitialRecognizer",
+        patterns=[Pattern(
+            "name_with_initial",
+            r"\b[A-Z][a-zA-Z]{2,}\s+[A-Z][.,]\s*[A-Z][a-zA-Z]+\b", 0.55)],
+    ))
+
     recognizers.append(PatternRecognizer(
         supported_entity="PH_TIN",
         patterns=[Pattern("ph_tin", r"\b\d{3}-\d{3}-\d{3}-\d{3}\b", 0.85)],
@@ -333,12 +344,28 @@ def build_analyzer(cfg: DetectionConfig) -> AnalyzerEngine:
     return analyzer
 
 
+_ALLCAPS_WORD = re.compile(r"\b[A-Z]{2,}\b")
+
+
+def _title_allcaps(text: str) -> str:
+    """Length-preserving copy with ALL-CAPS words converted to Title Case.
+
+    NER models trained on normal prose are far weaker on ALL-CAPS
+    headers ("BUREAU OF INTERNAL REVENUE"); analysing a case-normalised
+    copy and mapping spans back (offsets are identical because only case
+    changes) recovers those entities.
+    """
+    return _ALLCAPS_WORD.sub(lambda m: m.group().capitalize(), text)
+
+
 def analyze_text(analyzer: AnalyzerEngine, text: str,
                  cfg: DetectionConfig) -> list[RecognizerResult]:
     """Run detection and return non-overlapping results, best-span-first.
 
-    Overlapping detections are resolved by keeping the longer span (ties:
-    higher score) so replacements never corrupt each other.
+    Runs a second NER pass over a case-normalised copy when the text
+    contains ALL-CAPS runs, then unions both result sets. Overlapping
+    detections are resolved by keeping the longer span (ties: higher
+    score) so replacements never corrupt each other.
     """
     raw = analyzer.analyze(
         text=text,
@@ -346,6 +373,15 @@ def analyze_text(analyzer: AnalyzerEngine, text: str,
         language="en",
         score_threshold=cfg.score_threshold,
     )
+    if cfg.allcaps_second_pass:
+        titled = _title_allcaps(text)
+        if titled != text:
+            raw = raw + analyzer.analyze(
+                text=titled,
+                entities=cfg.entities,
+                language="en",
+                score_threshold=cfg.score_threshold,
+            )
     raw.sort(key=lambda r: (-(r.end - r.start), -r.score))
     chosen: list[RecognizerResult] = []
     for res in raw:

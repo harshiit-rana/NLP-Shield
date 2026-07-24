@@ -6,6 +6,7 @@ confidence figures are logged.
 
 from __future__ import annotations
 
+import csv
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -74,6 +75,15 @@ class Pipeline:
             if swept:
                 pseudo.counts["PERSON (fragment sweep)"] = swept
         sanitized_path.write_text(sanitized, encoding="utf-8")
+
+        if self._config.store.per_doc_csv:
+            scope = ("corpus" if self._config.pseudonyms.scope == "corpus"
+                     else base)
+            csv_path = out_dir / f"{base}.mapping.csv"
+            with open(csv_path, "w", newline="", encoding="utf-8") as fh:
+                writer = csv.writer(fh)
+                writer.writerow(["entity_type", "pseudonym", "real_value"])
+                writer.writerows(self._store.all_mappings(scope))
 
         report = DocumentReport(
             input_path=str(input_path),

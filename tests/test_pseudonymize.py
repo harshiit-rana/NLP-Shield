@@ -123,6 +123,24 @@ def test_full_value_sweep_skips_short_numeric_values(store):
     assert swept == "ref 2017-020" and n == 0
 
 
+def test_org_acronym_sweep(store):
+    store.add_mapping("d", "ORGANIZATION", "Bureau of Internal Revenue",
+                      "ORGANIZATION_001", "d")
+    swept, n = sweep_person_fragments(
+        "OFFICES OF BIR-RR9A-CABAMIRO and the bird sanctuary", store, "d")
+    assert "BIR-" not in swept
+    assert "ORGANIZATION_001-RR9A" in swept
+    assert "bird" in swept  # lowercase word untouched
+    assert n == 1
+
+
+def test_org_acronym_needs_three_words(store):
+    store.add_mapping("d", "ORGANIZATION", "Stanley Bradley",
+                      "ORGANIZATION_001", "d")
+    swept, n = sweep_person_fragments("SB report", store, "d")
+    assert swept == "SB report" and n == 0
+
+
 def test_reversal_does_not_clobber_similar_tokens(store):
     # PERSON_001 vs PERSON_0011-style prefix collisions
     for i, name in enumerate(["Alice"] + [f"Name{n}" for n in range(1, 11)]):
