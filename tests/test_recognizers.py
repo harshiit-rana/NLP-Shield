@@ -110,13 +110,15 @@ class TestLegacyRecognizers:
                         "MONEY_AMOUNT")
 
 
+@pytest.fixture(scope="module")
+def street():
+    for r in build_custom_recognizers():
+        if r.name == "StreetAddressRecognizer":
+            return r
+    raise AssertionError("StreetAddressRecognizer not registered")
+
+
 class TestStreetAddress:
-    @pytest.fixture(scope="class")
-    def street(self):
-        for r in build_custom_recognizers():
-            if r.name == "StreetAddressRecognizer":
-                return r
-        raise AssertionError("StreetAddressRecognizer not registered")
 
     def test_matches_street_lines(self, street):
         assert hits(street, "at 1031 A. Mabini Street, Ermita", "LOCATION")
