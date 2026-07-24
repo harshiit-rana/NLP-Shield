@@ -1,0 +1,45 @@
+{
+  "fixture": "nda",
+  "entities": [
+    {
+      "type": "ORGANIZATION",
+      "value": "Hardkraft Boxes"
+    },
+    {
+      "type": "IN_CIN",
+      "value": "U74999MH2018PTC312456"
+    },
+    {
+      "type": "LOCATION",
+      "value": "Mumbai"
+    },
+    {
+      "type": "ORGANIZATION",
+      "value": "Tinycrows Technologies"
+    },
+    {
+      "type": "IN_GSTIN",
+      "value": "27ABCPS1234F1Z5"
+    },
+    {
+      "type": "LOCATION",
+      "value": "Pune"
+    },
+    {
+      "type": "PERSON",
+      "value": "Ananya Deshpande"
+    },
+    {
+      "type": "PERSON",
+      "value": "Karan Mehta"
+    },
+    {
+      "type": "DATE_TIME",
+      "value": "12 June 2025"
+    },
+    {
+      "type": "EMAIL_ADDRESS",
+      "value": "legal@hardkraft.example.com"
+    }
+  ]
+}
