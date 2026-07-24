@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pseudonymiser"
+version = "1.0.0"
+description = "Local pseudonymisation of PII in scanned PDFs for LLM-safe text"
+requires-python = ">=3.10"
+dependencies = [
+    "presidio-analyzer",
+    "presidio-anonymizer",
+    "pdf2image",
+    "pytesseract",
+    "opencv-python-headless",
+    "PyMuPDF",
+    "Faker",
+    "cryptography",
+    "PyYAML",
+    "numpy",
+]
+
+[project.optional-dependencies]
+paddle = ["paddleocr", "paddlepaddle"]
+gliner = ["gliner"]
+dev = ["pytest"]
+
+[project.scripts]
+pseudonymise = "pseudonymiser.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
