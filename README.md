@@ -35,6 +35,20 @@ make download-models        # one-time; the runtime is offline after this
 model. This is the **only** step that touches the network; copy the
 environment to an air-gapped machine afterwards if required.
 
+**Installing the PaddleOCR extra** (`pip install -e ".[paddle]"`):
+`paddlex` hard-pins `PyYAML==6.0.2`, which is older than what
+`presidio-analyzer` requires (`>=6.0.3`) — pip will print a dependency
+conflict warning during install. This is safe to ignore: both libraries
+import and run fine with `PyYAML==6.0.3` in practice, and the conflict
+is just an overly strict pin, not a real incompatibility. If `cv2`
+stops importing after installing/uninstalling opencv variants (the
+`opencv-python`/`opencv-contrib-python`/`-headless` family shares one
+`cv2/` install location, and removing one variant can delete files
+another variant's metadata still claims), fix it with:
+```bash
+pip install --force-reinstall --no-deps opencv-contrib-python-headless==4.10.0.84
+```
+
 ## Quickstart
 
 ```bash
