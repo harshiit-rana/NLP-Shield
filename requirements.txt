@@ -10,7 +10,7 @@ opencv-contrib-python-headless==4.10.0.84
 PyMuPDF==1.28.0
 Faker==40.35.0
 cryptography==48.0.1
-PyYAML==6.0.2
+PyYAML==6.0.3
 numpy==2.3.5
 spacy==3.8.14
 
