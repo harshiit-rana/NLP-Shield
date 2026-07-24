@@ -141,8 +141,24 @@ def build_custom_recognizers() -> list[PatternRecognizer]:
     recognizers.append(PatternRecognizer(
         supported_entity="MONEY_AMOUNT",
         patterns=[
-            Pattern("money_symbol", r"(?:[₱$€£]|(?:Rs|INR|P)\.?\s?)\s?[\d,]+(?:\.\d{1,2})?", 0.7),
+            # at least one digit required — "[\d,]+" alone also matched a
+            # bare comma after a stray "P"
+            Pattern("money_symbol",
+                    r"(?:[₱$€£]|(?:Rs|INR|P)\.?\s?)\s?\d[\d,]*(?:\.\d{1,2})?", 0.7),
         ],
+    ))
+
+    # Street addresses: NER often tags only the city, leaving the street
+    # line ("1031 A. Mabini Street") untouched.
+    recognizers.append(PatternRecognizer(
+        supported_entity="LOCATION",
+        name="StreetAddressRecognizer",
+        patterns=[Pattern(
+            "street_address",
+            r"\b\d{1,5}(?:[/-]\d{1,4})?\s+(?:[A-Z][A-Za-z.']*\s+){0,4}"
+            r"(?:Street|Road|Avenue|Lane|Marg|Nagar|Chowk|Boulevard|"
+            r"Drive|Highway|St|Rd|Ave|Ln|Blvd|Hwy)\b\.?", 0.5)],
+        context=["address", "residing", "located", "office", "at"],
     ))
 
     return recognizers

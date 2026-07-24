@@ -15,10 +15,14 @@ import logging
 import sys
 from pathlib import Path
 
-from .config import load_config
+from .config import ConfigError, load_config
+from .detect import DetectionError
+from .ocr import OcrError
 from .pipeline import DocumentReport, Pipeline
 from .pseudonymize import depseudonymize
-from .store import MappingStore
+from .store import MappingStore, StoreError
+
+PseudonymiserError = (ConfigError, DetectionError, OcrError, StoreError)
 
 
 def _print_report(report: DocumentReport) -> None:
@@ -71,6 +75,10 @@ def main(argv: list[str] | None = None) -> int:
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(levelname)s %(name)s: %(message)s",
     )
+    if not args.verbose:
+        # Presidio's recognizer-registry startup chatter drowns the useful
+        # output; keep it to warnings unless -v is given.
+        logging.getLogger("presidio-analyzer").setLevel(logging.WARNING)
 
     config = load_config(args.config)
 
@@ -78,6 +86,9 @@ def main(argv: list[str] | None = None) -> int:
         pipeline = Pipeline(config)
         try:
             _print_report(pipeline.process_file(args.input, args.out_dir))
+        except (OSError, PseudonymiserError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
         finally:
             pipeline.close()
         return 0
@@ -89,6 +100,9 @@ def main(argv: list[str] | None = None) -> int:
             for report in reports:
                 _print_report(report)
             print(f"\nProcessed {len(reports)} file(s).")
+        except (OSError, PseudonymiserError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
         finally:
             pipeline.close()
         return 0

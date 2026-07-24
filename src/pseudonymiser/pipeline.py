@@ -13,7 +13,7 @@ from pathlib import Path
 from .config import Config
 from .detect import analyze_text, build_analyzer
 from .ocr import IMAGE_EXTENSIONS, extract_document
-from .pseudonymize import Pseudonymizer
+from .pseudonymize import Pseudonymizer, sweep_person_fragments
 from .store import MappingStore
 
 logger = logging.getLogger(__name__)
@@ -65,7 +65,15 @@ class Pipeline:
 
         results = analyze_text(self._analyzer, doc.text, self._config.detection)
         pseudo = self._pseudonymizer.apply(doc.text, results, doc_id=base)
-        sanitized_path.write_text(pseudo.text, encoding="utf-8")
+        sanitized = pseudo.text
+        if self._config.pseudonyms.fragment_sweep:
+            scope = ("corpus" if self._config.pseudonyms.scope == "corpus"
+                     else base)
+            sanitized, swept = sweep_person_fragments(sanitized, self._store,
+                                                      scope)
+            if swept:
+                pseudo.counts["PERSON (fragment sweep)"] = swept
+        sanitized_path.write_text(sanitized, encoding="utf-8")
 
         report = DocumentReport(
             input_path=str(input_path),
@@ -84,6 +92,11 @@ class Pipeline:
         """Process every supported file in a directory; one bad file does
         not abort the batch."""
         folder = Path(folder)
+        if not folder.exists():
+            raise FileNotFoundError(f"Input folder does not exist: {folder}")
+        if not folder.is_dir():
+            raise NotADirectoryError(f"Not a directory: {folder} "
+                                     f"(use 'pseudonymise run' for single files)")
         supported = {".pdf"} | IMAGE_EXTENSIONS
         reports: list[DocumentReport] = []
         for path in sorted(folder.iterdir()):

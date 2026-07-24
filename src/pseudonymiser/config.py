@@ -57,6 +57,9 @@ class PseudonymConfig:
     style: str = "token"        # "token" (PERSON_001) | "faker" (realistic)
     scope: str = "document"     # "document" | "corpus"
     faker_locale: str = "en_IN"
+    # Re-scan output for OCR-garbled fragments of mapped person names
+    # (e.g. "TA B. JAVIER" when "GRACIA B. JAVIER" was already mapped).
+    fragment_sweep: bool = True
 
 
 @dataclass

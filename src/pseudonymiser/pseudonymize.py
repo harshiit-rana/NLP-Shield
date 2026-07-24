@@ -115,6 +115,65 @@ class Pseudonymizer:
         return PseudonymizationResult(text=out, counts=counts)
 
 
+# Words that may appear inside a detected "name" span but are far too
+# common to sweep on their own.
+_SWEEP_STOPWORDS = {
+    "hand", "seal", "witness", "signed", "dear", "shri", "smt", "miss",
+    "mister", "doctor", "junior", "senior",
+}
+
+
+# Name-like entity types whose mapped values are safe to sweep verbatim.
+_SWEEPABLE_TYPES = {"PERSON", "LOCATION", "ORGANIZATION", "EMAIL_ADDRESS",
+                    "IN_UPI"}
+
+
+def sweep_person_fragments(text: str, store: MappingStore,
+                           scope: str) -> tuple[str, int]:
+    """Redact residual occurrences of already-mapped values.
+
+    Two passes over everything mapped in this scope:
+
+    1. Any name-like mapped value (person, location, organisation, email,
+       UPI) still present verbatim — NER sometimes tags one occurrence of
+       a value but misses another in a noisier context.
+    2. Standalone words of four or more letters from mapped PERSON values,
+       because scanned signature blocks often yield truncated copies of a
+       name NER cannot recognise (e.g. ``TA B. JAVIER`` for
+       ``GRACIA B. JAVIER``).
+
+    Reversal restores the full mapped value at swept positions, which is
+    intentionally lossy for garbled fragments — privacy wins over byte
+    fidelity there.
+    """
+    replaced = 0
+    mappings = store.all_mappings(scope)
+
+    for entity_type, pseudonym, real in sorted(mappings, key=lambda m: -len(m[2])):
+        if entity_type not in _SWEEPABLE_TYPES:
+            continue
+        if len(real) < 5 or not re.search(r"[A-Za-z]", real):
+            continue
+        pattern = re.compile(rf"(?<!\w){re.escape(real)}(?!\w)", re.IGNORECASE)
+        text, n = pattern.subn(pseudonym, text)
+        replaced += n
+
+    for entity_type, pseudonym, real in mappings:
+        if entity_type != "PERSON":
+            continue
+        for token in re.split(r"[^A-Za-z]+", real):
+            if len(token) < 4 or token.lower() in _SWEEP_STOPWORDS:
+                continue
+            pattern = re.compile(rf"\b{re.escape(token)}\b", re.IGNORECASE)
+            text, n = pattern.subn(pseudonym, text)
+            replaced += n
+
+    if replaced:
+        logger.info("Residual sweep replaced %d leftover occurrences",
+                    replaced)
+    return text, replaced
+
+
 def depseudonymize(text: str, store: MappingStore,
                    scope: str | None = None) -> str:
     """Restore real values in LLM output that contains pseudonyms.
