@@ -1,0 +1,45 @@
+{
+  "fixture": "letter",
+  "entities": [
+    {
+      "type": "PERSON",
+      "value": "Arun Patel"
+    },
+    {
+      "type": "DATE_TIME",
+      "value": "2 January 2026"
+    },
+    {
+      "type": "PERSON",
+      "value": "Sunita Rao"
+    },
+    {
+      "type": "LOCATION",
+      "value": "Kolkata"
+    },
+    {
+      "type": "IP_ADDRESS",
+      "value": "192.168.10.45"
+    },
+    {
+      "type": "URL",
+      "value": "https://portal.example.org"
+    },
+    {
+      "type": "PHONE_NUMBER",
+      "value": "044-28123456"
+    },
+    {
+      "type": "EMAIL_ADDRESS",
+      "value": "accounts@fixtures.example.in"
+    },
+    {
+      "type": "PH_TIN",
+      "value": "123-456-789-000"
+    },
+    {
+      "type": "PERSON",
+      "value": "David Fernandes"
+    }
+  ]
+}

@@ -1,0 +1,49 @@
+{
+  "fixture": "contract",
+  "entities": [
+    {
+      "type": "REFERENCE_NUMBER",
+      "value": "No. HKB/2025-114"
+    },
+    {
+      "type": "PERSON",
+      "value": "Rajesh Kumar Sharma"
+    },
+    {
+      "type": "LOCATION",
+      "value": "Jaipur"
+    },
+    {
+      "type": "IN_PIN_CODE",
+      "value": "302016"
+    },
+    {
+      "type": "PERSON",
+      "value": "Meera Krishnan"
+    },
+    {
+      "type": "LOCATION",
+      "value": "Chennai"
+    },
+    {
+      "type": "EMAIL_ADDRESS",
+      "value": "rajesh.sharma@example.com"
+    },
+    {
+      "type": "PHONE_NUMBER",
+      "value": "+91 9876543210"
+    },
+    {
+      "type": "IN_PAN",
+      "value": "ABCPS1234F"
+    },
+    {
+      "type": "MONEY_AMOUNT",
+      "value": "Rs. 1,495,000.00"
+    },
+    {
+      "type": "DATE_TIME",
+      "value": "15 March 2025"
+    }
+  ]
+}

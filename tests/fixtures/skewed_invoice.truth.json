@@ -1,0 +1,37 @@
+{
+  "fixture": "skewed_invoice",
+  "entities": [
+    {
+      "type": "PERSON",
+      "value": "Vikram Singh Chauhan"
+    },
+    {
+      "type": "LOCATION",
+      "value": "Mumbai"
+    },
+    {
+      "type": "IN_PIN_CODE",
+      "value": "400001"
+    },
+    {
+      "type": "IN_AADHAAR",
+      "value": "987654321096"
+    },
+    {
+      "type": "CREDIT_CARD",
+      "value": "5105123456789018"
+    },
+    {
+      "type": "EMAIL_ADDRESS",
+      "value": "vikram.chauhan@example.com"
+    },
+    {
+      "type": "PHONE_NUMBER",
+      "value": "+91-9123456789"
+    },
+    {
+      "type": "MONEY_AMOUNT",
+      "value": "Rs. 78,500.00"
+    }
+  ]
+}

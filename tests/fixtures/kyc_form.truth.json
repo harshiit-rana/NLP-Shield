@@ -1,0 +1,41 @@
+{
+  "fixture": "kyc_form",
+  "entities": [
+    {
+      "type": "PERSON",
+      "value": "Priya Venkatesan"
+    },
+    {
+      "type": "IN_AADHAAR",
+      "value": "2345 6789 0124"
+    },
+    {
+      "type": "BANK_ACCOUNT",
+      "value": "30112233445"
+    },
+    {
+      "type": "IN_IFSC",
+      "value": "HDFC0001234"
+    },
+    {
+      "type": "CREDIT_CARD",
+      "value": "4539 0123 4567 890"
+    },
+    {
+      "type": "IN_UPI",
+      "value": "priya.v@okhdfc"
+    },
+    {
+      "type": "PHONE_NUMBER",
+      "value": "9812345670"
+    },
+    {
+      "type": "LOCATION",
+      "value": "Bengaluru"
+    },
+    {
+      "type": "IN_PIN_CODE",
+      "value": "560001"
+    }
+  ]
+}

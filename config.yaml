@@ -1,0 +1,31 @@
+# Pseudonymiser configuration. All processing is local; nothing here may
+# point at a network service.
+
+ocr:
+  engine: tesseract          # tesseract | paddleocr (optional extra)
+  dpi: 300                   # rasterisation DPI (values below 300 are raised to 300)
+  tesseract_oem: 1           # LSTM engine
+  tesseract_psm: 3           # automatic page segmentation
+  low_confidence_threshold: 60   # mean word confidence below this flags the page
+  deskew: true
+  denoise: true
+  adaptive_threshold: true
+  border_removal: true
+  perspective_correction: true
+
+detection:
+  score_threshold: 0.35      # recall-first: over-redacting beats leaking
+  spacy_model: en_core_web_trf   # transformer NER; en_core_web_lg as fallback
+  use_gliner: false          # union GLiNER (urchade/gliner_multi_pii-v1) results
+  gliner_model: urchade/gliner_multi_pii-v1
+  gliner_threshold: 0.4
+  # entities: [...]          # uncomment to override the default entity list
+
+pseudonyms:
+  style: token               # token (PERSON_001) | faker (realistic fakes)
+  scope: document            # document | corpus (corpus = same mapping across docs)
+  faker_locale: en_IN
+
+store:
+  db_path: pseudonymiser.db  # gitignored; contains encrypted real values
+  key_file: .pseudonymiser.key   # gitignored; or set PSEUDONYMISER_KEY[_FILE]
