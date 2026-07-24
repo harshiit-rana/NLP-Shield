@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pdf
+temp_pdf_pages/
+output_processed/
+ocr_output/
+redacted_output/
+pdf_pages/
+Release-*/
+*.json
+*.txt
