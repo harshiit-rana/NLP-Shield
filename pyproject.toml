@@ -12,7 +12,7 @@ dependencies = [
     "presidio-anonymizer",
     "pdf2image",
     "pytesseract",
-    "opencv-python-headless",
+    "opencv-contrib-python-headless",
     "PyMuPDF",
     "Faker",
     "cryptography",
@@ -21,7 +21,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-paddle = ["paddleocr", "paddlepaddle"]
+paddle = ["paddleocr", "paddlepaddle", "paddlex[ocr-core]"]
 gliner = ["gliner"]
 dev = ["pytest"]
 

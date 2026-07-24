@@ -104,6 +104,28 @@ class TestLegacyRecognizers:
                      "total Rs. 1,495,000.00 due", "MONEY_AMOUNT")
         assert any("1,495,000" in f for f in found)
 
+    def test_money_requires_a_digit(self, recognizers):
+        # regression: "P" followed by a bare comma is not an amount
+        assert not hits(recognizers["MONEY_AMOUNT"], "TIONG Op, ROLL",
+                        "MONEY_AMOUNT")
+
+
+class TestStreetAddress:
+    @pytest.fixture(scope="class")
+    def street(self):
+        for r in build_custom_recognizers():
+            if r.name == "StreetAddressRecognizer":
+                return r
+        raise AssertionError("StreetAddressRecognizer not registered")
+
+    def test_matches_street_lines(self, street):
+        assert hits(street, "at 1031 A. Mabini Street, Ermita", "LOCATION")
+        assert hits(street, "office: 42 Nehru Marg", "LOCATION")
+        assert hits(street, "1031 A. Mabini St. Ermita", "LOCATION")
+
+    def test_ignores_plain_numbers(self, street):
+        assert not hits(street, "consists of 3 pages in total", "LOCATION")
+
 
 @pytest.fixture(scope="module")
 def rec():

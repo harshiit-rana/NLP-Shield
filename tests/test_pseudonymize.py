@@ -4,7 +4,11 @@ import pytest
 from presidio_analyzer import RecognizerResult
 
 from pseudonymiser.config import PseudonymConfig, StoreConfig
-from pseudonymiser.pseudonymize import Pseudonymizer, depseudonymize
+from pseudonymiser.pseudonymize import (
+    Pseudonymizer,
+    depseudonymize,
+    sweep_person_fragments,
+)
 from pseudonymiser.store import MappingStore
 
 
@@ -87,6 +91,36 @@ def test_roundtrip_with_whitespace_spanning_detection(store):
     sanitized = p.apply(text, res, "doc1").text
     assert "\n" in sanitized
     assert depseudonymize(sanitized, store, scope="doc1") == text
+
+
+def test_fragment_sweep_catches_garbled_names(store):
+    store.add_mapping("d", "PERSON", "GRACIA B. JAVIER", "PERSON_001", "d")
+    text = "Signed by TA B. JAVIER, Asst. Director, and witnessed by Gracia."
+    swept, n = sweep_person_fragments(text, store, "d")
+    assert "JAVIER" not in swept and "Gracia" not in swept
+    assert "PERSON_001" in swept
+    assert n == 2
+
+
+def test_fragment_sweep_skips_short_and_common_tokens(store):
+    store.add_mapping("d", "PERSON", "MY HAND AND SEAL", "PERSON_001", "d")
+    text = "hand over the seal to me"
+    swept, n = sweep_person_fragments(text, store, "d")
+    assert swept == text and n == 0
+
+
+def test_full_value_sweep_catches_missed_occurrences(store):
+    # NER tagged "Ermita" once but missed a second occurrence in a noisy
+    # signature block; the sweep must catch the verbatim leftover.
+    store.add_mapping("d", "LOCATION", "Ermita", "LOCATION_001", "d")
+    swept, n = sweep_person_fragments("St. Ermita area", store, "d")
+    assert swept == "St. LOCATION_001 area" and n == 1
+
+
+def test_full_value_sweep_skips_short_numeric_values(store):
+    store.add_mapping("d", "DATE_TIME", "2017", "DATE_TIME_001", "d")
+    swept, n = sweep_person_fragments("ref 2017-020", store, "d")
+    assert swept == "ref 2017-020" and n == 0
 
 
 def test_reversal_does_not_clobber_similar_tokens(store):

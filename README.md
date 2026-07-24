@@ -80,6 +80,20 @@ validated — Aadhaar with the Verhoeff checksum, cards with Luhn, PAN by
 structure — so garbled scans are still caught while random strings are
 rejected.
 
+**Residual sweep** (`pseudonyms.fragment_sweep`, on by default): after
+pseudonymisation the output is re-scanned for (a) verbatim occurrences of
+any mapped name/location/organisation/email that NER missed in a noisier
+context, and (b) standalone words from mapped person names — so an
+OCR-truncated signature like `TA B. JAVIER` is still redacted once
+`GRACIA B. JAVIER` is known.
+
+**Choosing an OCR engine:** Tesseract (default) is fast; PaddleOCR
+(`ocr.engine: paddleocr`, install with `pip install -e ".[paddle]"`) reads
+noisy scans measurably better (on our worst test page: mean confidence 96
+vs 84, and it recovered a name Tesseract missed) but is currently much
+slower on CPU because MKL-DNN must be disabled to work around a
+paddlepaddle 3.x bug. Use it for accuracy-critical documents.
+
 ## Accuracy (synthetic scanned-PDF fixtures)
 
 `make fixtures && make evaluate` renders five image-only PDFs (contract,
@@ -88,8 +102,8 @@ scores the full pipeline end to end:
 
 ```
 recall:    1.000  (48/48 OCR-captured values removed from sanitized output)
-precision: 0.907  (5 extra redactions, all deliberate over-redaction)
-f1:        0.951
+precision: 0.875  (7 extra redactions, all deliberate over-redaction)
+f1:        0.933
 ACCEPTANCE BAR MET: zero ground-truth PII strings survived.
 ```
 
@@ -102,7 +116,11 @@ Known limitations:
 * Recall is measured on synthetic renders; very noisy real scans can
   still produce OCR text too garbled for any recogniser. Low-confidence
   pages are flagged for exactly this reason — review them.
-* Handwriting, signatures, and stamps are not reliably OCR'd.
+* Handwriting, signatures, and stamps are not reliably OCR'd. Isolated
+  OCR-garbage tokens that were never detected as any entity anywhere in
+  the document (e.g. a mangled notary commission line) cannot be swept
+  and may survive — review flagged pages, or enable GLiNER for a second
+  detection opinion.
 * Bare 6-digit numbers / 9-18-digit numbers are only treated as PIN
   codes / account numbers when context supports it; a stray account
   number with no context can slip through.
@@ -136,6 +154,6 @@ Known limitations:
 
 ```bash
 make fixtures   # regenerate synthetic test PDFs (all PII is fake, valid-checksum)
-make test       # 55 unit tests: recognisers, validators, OCR, store, round-trip
+make test       # 62 unit tests: recognisers, validators, OCR, store, round-trip
 make evaluate   # end-to-end precision/recall/F1 + zero-leak acceptance bar
 ```
