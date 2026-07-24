@@ -133,21 +133,42 @@ def _perspective_correction(img: np.ndarray, min_quad_area_ratio: float = 0.5) -
         return img
 
 
-def _deskew(gray: np.ndarray, max_angle: float = 15.0) -> np.ndarray:
-    """Rotate the page so text lines are horizontal (small angles only)."""
+def _measure_skew(gray: np.ndarray) -> float:
+    """Estimated text-line skew in degrees, normalised to (-45, 45]."""
     inverted = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
     coords = np.column_stack(np.where(inverted > 0))
     if len(coords) < 100:
-        return gray
+        return 0.0
     angle = cv2.minAreaRect(coords)[-1]
     if angle > 45:
         angle -= 90
-    if abs(angle) < 0.1 or abs(angle) > max_angle:
-        return gray
+    return float(angle)
+
+
+def _rotate(gray: np.ndarray, angle: float) -> np.ndarray:
     (h, w) = gray.shape[:2]
     m = cv2.getRotationMatrix2D((w // 2, h // 2), angle, 1.0)
     return cv2.warpAffine(gray, m, (w, h), flags=cv2.INTER_CUBIC,
                           borderMode=cv2.BORDER_REPLICATE)
+
+
+def _deskew(gray: np.ndarray, max_angle: float = 15.0) -> np.ndarray:
+    """Rotate the page so text lines are horizontal (small angles only).
+
+    minAreaRect's angle-sign convention has changed between OpenCV
+    releases, so rather than trusting the sign we rotate both ways and
+    keep the result whose re-measured residual skew is smallest.
+    """
+    angle = _measure_skew(gray)
+    if abs(angle) < 0.1 or abs(angle) > max_angle:
+        return gray
+    best, best_residual = gray, abs(angle)
+    for candidate_angle in (angle, -angle):
+        rotated = _rotate(gray, candidate_angle)
+        residual = abs(_measure_skew(rotated))
+        if residual < best_residual:
+            best, best_residual = rotated, residual
+    return best
 
 
 def _remove_borders(binary: np.ndarray, scan_fraction: float = 0.05,
@@ -186,6 +207,10 @@ def preprocess(img: np.ndarray, cfg: OcrConfig) -> np.ndarray:
                                      cv2.THRESH_BINARY, 31, 15)
     if cfg.border_removal:
         gray = _remove_borders(gray)
+    # Tesseract segments noticeably better with a clean white margin
+    # around the page content.
+    gray = cv2.copyMakeBorder(gray, 24, 24, 24, 24,
+                              cv2.BORDER_CONSTANT, value=255)
     return gray
 
 
@@ -237,6 +262,9 @@ def _ocr_paddle(gray: np.ndarray, cfg: OcrConfig) -> tuple[str, float]:
             use_doc_orientation_classify=False,
             use_doc_unwarping=False,
             use_textline_orientation=False,
+            # paddlepaddle 3.x CPU crashes in oneDNN PIR conversion on
+            # some ops; plain CPU inference avoids it
+            enable_mkldnn=False,
         )
     bgr = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
     texts: list[str] = []
