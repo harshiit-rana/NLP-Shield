@@ -34,3 +34,10 @@ debug_preprocessed/
 # Local tooling
 Release-*/
 .DS_Store
+myenv/
+myenv311/
+outputs/
+*.zip
+1.txt
+vaultdoc/node_modules/
+vaultdoc/dist/

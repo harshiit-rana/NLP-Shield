@@ -1,0 +1,160 @@
+      <section class="view" id="view-restore">
+        <div class="content restore-page px-8 pt-8 pb-10">
+          <div class="mb-7">
+            <h1 class="text-[22px] font-semibold tracking-tight">Restore identities</h1>
+            <p class="sub mt-1.5">Paste an AI response and replace its privacy tokens using your stored keys or a CSV file.</p>
+          </div>
+          <div class="restore-layout grid gap-5 lg:grid-cols-2">
+            <div class="card restore-panel">
+              <div class="card-hd flex-wrap">
+                <span class="ttl">AI response</span>
+                <div class="seg ml-auto" id="srcTabs">
+                  <button class="on" data-src="vault">Use stored keys</button>
+                  <button data-src="csv">Upload CSV</button>
+                </div>
+              </div>
+              <div class="card-bd">
+                <div id="srcVault" class="flex items-center justify-between gap-3">
+                  <p class="key-source-label" id="vaultKeySummary">Stored keys are ready to use.</p>
+                  <span class="pill mono" id="loadedCount" style="font-size:10px">0 keys</span>
+                </div>
+                <div id="srcCsv" class="hidden">
+                  <div class="dz csv-compact" id="csvDrop">
+                    <div class="flex items-center justify-between gap-3">
+                      <div class="min-w-0"><p class="csv-title">Drop a <span class="mono">keys.csv</span> file</p><p class="dim mt-0.5" style="font-size:10.8px">The file is read locally.</p></div>
+                      <button class="btn btn-sm" id="btnCsvPick"><i data-lucide="folder-open"></i> Browse</button>
+                      <input type="file" id="csvInput" class="hidden" accept=".csv,text/csv" />
+                    </div>
+                  </div>
+                  <div id="csvInfo" class="hidden mt-2 dim" style="font-size:11px"></div>
+                </div>
+                <textarea class="field mono restore-text" id="restoreInput" rows="14" style="font-size:12px;line-height:1.9" placeholder="Paste the AI response containing tokens here…&#10;&#10;For example: ORGANIZATION_001 shall indemnify PERSON_001 within 30 days."></textarea>
+                <div class="flex items-center gap-3 flex-wrap">
+                  <div class="restore-status" id="restoreScan">No tokens detected yet.</div>
+                  <div class="ml-auto flex items-center gap-2">
+                    <button class="btn btn-sm btn-ghost" id="btnPaste"><i data-lucide="clipboard-paste"></i> Paste</button>
+                    <button class="btn btn-sm btn-ghost" id="btnClearRestore"><i data-lucide="x"></i> Clear</button>
+                    <button class="btn btn-primary" id="btnRestoreRun2"><i data-lucide="wand-sparkles"></i> Restore</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="card restore-panel restore-output" id="restoreResult">
+              <div class="card-hd"><span class="ttl">Restored text</span><div class="restore-result-actions ml-auto">
+                <button class="btn btn-sm btn-ghost hidden" id="btnCopyRestored"><i data-lucide="copy"></i> Copy</button>
+                <button class="btn btn-sm btn-ghost hidden" id="btnDlRestored"><i data-lucide="download"></i> Download</button>
+              </div></div>
+              <div class="pane-bd" id="paneRestored"><span class="dim">Your restored response will appear here.</span></div>
+              <div class="restore-foot"><p class="restore-status" id="unresolvedNote">Your text stays on this device.</p></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="view-chat">
+        <div class="content chat-page px-8 pt-7 pb-6">
+          <div class="chat-heading">
+            <div><h1 class="text-[21px] font-semibold tracking-tight">AI Chat</h1><p class="sub mt-1">Ask questions about your scrubbed document.</p></div>
+            <details class="advanced" id="chatAdvanced">
+              <summary><i data-lucide="sliders-horizontal" style="width:14px;height:14px"></i> Advanced settings</summary>
+              <div class="advanced-panel"><div class="advanced-grid">
+                <div class="advanced-group advanced-full">
+                  <div class="flex items-center justify-between gap-3 mb-3"><h3 class="!mb-0">Model</h3><span class="pill mono" id="modelBadge" style="font-size:10px">openai/gpt-oss-120b</span></div>
+                  <div class="grid gap-2 sm:grid-cols-2" id="modelGrid"></div>
+                </div>
+                <div class="advanced-group">
+                  <h3>Groq API key</h3>
+                  <div class="relative">
+                    <input class="field mono !pr-9" id="groqKey" type="password" placeholder="gsk_…" autocomplete="off" spellcheck="false" style="font-size:12px" />
+                    <button class="absolute" style="right:9px;top:8px;color:var(--dim)" id="btnPeekKey" aria-label="Show key"><i data-lucide="eye" style="width:14px;height:14px"></i></button>
+                  </div>
+                  <div class="grid gap-2.5 mt-3">
+                    <label class="flex items-center gap-2.5 mut cursor-pointer" style="font-size:11.5px"><span class="switch" id="persistSwitch" role="switch" aria-checked="false" tabindex="0"></span>Remember in this browser</label>
+                    <label class="flex items-center gap-2.5 mut cursor-pointer" style="font-size:11.5px"><span class="switch" id="directSwitch" role="switch" aria-checked="false" tabindex="0"></span>Call Groq directly</label>
+                  </div>
+                </div>
+                <div class="advanced-group">
+                  <h3>Generation</h3>
+                  <div class="grid gap-3">
+                    <div><div class="flex justify-between mb-1.5" style="font-size:11px"><span class="mut">Temperature</span><span class="mono" id="tempVal">0.20</span></div><input type="range" min="0" max="1" step="0.05" value="0.2" id="tempRange" /></div>
+                    <div><div class="flex justify-between mb-1.5" style="font-size:11px"><span class="mut">Max tokens</span><span class="mono" id="maxTokVal">1024</span></div><input type="range" min="256" max="4096" step="256" value="1024" id="maxTokRange" /></div>
+                  </div>
+                </div>
+                <div class="advanced-group advanced-full">
+                  <h3>System instruction</h3>
+                  <textarea class="field mono" id="systemPrompt" rows="4" style="font-size:11px;line-height:1.7">You are NLP Shield AI, an expert assistant for confidential document analysis.
+
+1. The provided text is pseudonymised for privacy: sensitive entities (names, organisations, locations, dates, money, IDs) are replaced with privacy tokens like PERSON_001, ORGANIZATION_001, LOCATION_001, etc.
+2. Be conversational and cordial. Respond naturally to greetings, introducing how you can analyze the document.
+3. Provide thorough, in-depth analytical breakdowns with clear clause/section citations.
+4. CRITICAL: Preserve all privacy tokens (e.g. PERSON_001, ORGANIZATION_001) exactly verbatim in your responses so they can be seamlessly restored to their real identities.</textarea>
+                </div>
+                <div class="advanced-group advanced-full">
+                  <div class="flex items-center gap-3">
+                    <span class="mut" style="font-size:11.5px">Backend connection</span>
+                    <span class="pill" id="probeResult"><span class="dot off"></span> Not probed</span>
+                    <button class="btn btn-sm ml-auto" id="btnProbe"><i data-lucide="activity"></i> Test</button>
+                    <button class="btn btn-sm" id="btnSettings"><i data-lucide="plug-zap"></i> Connection settings</button>
+                  </div>
+                  <div class="hidden" id="connectionDetails">
+                    <input class="field mono mt-3" id="apiBaseInput" placeholder="http://localhost:8000" spellcheck="false" style="font-size:12px" />
+                    <div class="seg w-full mt-3" id="modeTabs">
+                      <button class="flex-1 justify-center on" data-mode="auto">Auto</button>
+                      <button class="flex-1 justify-center" data-mode="live">Live</button>
+                      <button class="flex-1 justify-center" data-mode="mock">Sandbox</button>
+                    </div>
+                    <button class="btn btn-sm btn-primary mt-3" id="btnSaveConn"><i data-lucide="check"></i> Apply connection</button>
+                  </div>
+                </div>
+                <div class="advanced-group advanced-full">
+                  <div class="flex items-center gap-2"><h3 class="!mb-0">Request preview</h3><button class="btn btn-sm btn-ghost ml-auto" id="btnCopyPayload"><i data-lucide="copy"></i> Copy</button></div>
+                  <pre class="code-block !p-3 mt-2" style="font-size:10.5px;max-height:180px;overflow:auto;margin-bottom:0" id="payloadPreview"></pre>
+                </div>
+              </div></div>
+            </details>
+          </div>
+
+          <div class="card chat-window">
+            <div class="card-hd !py-2.5 flex-wrap">
+              <i data-lucide="paperclip" class="hd"></i>
+              <span class="ttl mono truncate" style="font-size:12px" id="chatCtx">No document attached</span>
+              <span class="dim" style="font-size:10.5px" id="chatCtxTokens">0 keys</span>
+              <button class="btn btn-sm btn-ghost hidden" id="btnDetachCtx"><i data-lucide="x"></i> Detach</button>
+              <span class="ml-auto mut" style="font-size:11px">Auto-restore</span>
+              <div class="switch" id="autoRestoreSwitch" role="switch" aria-checked="false" tabindex="0" title="Restore identities in your view"></div>
+              <span class="hidden" id="autoRestoreState">OFF</span>
+            </div>
+            <div class="chat-log" id="chatLog"></div>
+            <div class="chat-input-area">
+              <div class="flex items-end gap-2">
+                <textarea class="field !py-2.5" id="chatInput" rows="1" style="max-height:132px" placeholder="Ask about obligations, dates, or counterparties…"></textarea>
+                <button class="btn btn-primary flex-none h-[38px] px-4" id="btnSend"><i data-lucide="send-horizontal"></i> Send</button>
+              </div>
+              <div class="flex items-center gap-2 mt-2 dim" style="font-size:10.5px"><i data-lucide="shield" style="width:11px;height:11px;color:var(--ok)"></i><span>Only redacted text is sent to the model.</span><span class="hidden" id="chatEngineLabel">Sandbox engine</span><span class="hidden" id="chatChars">0</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      </main>
+    </div>
+  </div>
+
+  <div class="overlay" id="overlay"></div>
+  <aside class="drawer" id="vaultDrawer" aria-label="Key vault">
+    <div class="flex items-center gap-3 px-4" style="padding:13px 16px;border-bottom:1px solid var(--line)">
+      <div class="dz-ic" style="width:32px;height:32px;border-radius:8px"><i data-lucide="key-round" style="width:15px;height:15px"></i></div>
+      <div class="min-w-0"><p style="font-size:13px;font-weight:600">Key vault</p><p class="dim" style="font-size:10.5px">Mapping keys for past runs · <span class="mono" id="vaultMode">in-memory</span></p></div>
+      <button class="btn btn-sm btn-ghost ml-auto" id="btnCloseVault"><i data-lucide="x"></i></button>
+    </div>
+    <div class="px-4 py-3 flex items-center gap-2" style="border-bottom:1px solid var(--line)"><span class="eyebrow">Recent sessions</span><span class="pill ml-auto" id="vaultCount" style="font-size:10.5px">0</span></div>
+    <div class="flex-1 overflow-y-auto p-4 grid gap-3 content-start" id="sessionList"></div>
+    <div class="p-4 grid gap-2" style="border-top:1px solid var(--line)"><p class="dim" style="font-size:11px">Purging deletes keys from this browser only.</p><button class="btn btn-sm w-full justify-center btn-danger" id="btnVaultPurge"><i data-lucide="trash-2"></i> Purge all keys</button></div>
+  </aside>
+
+  <div class="cmdk card" id="cmdk" role="dialog" aria-label="Command palette">
+    <div class="flex items-center gap-2.5 px-3.5 py-3" style="border-bottom:1px solid var(--line)"><i data-lucide="command" style="width:14px;height:14px;color:var(--muted)"></i><input class="bg-transparent border-0 outline-none flex-1" style="font-size:13px" id="cmdkInput" placeholder="Jump to a view or run an action…" spellcheck="false" /><span class="kbd">esc</span></div>
+    <div class="p-2 max-h-[52vh] overflow-y-auto" id="cmdkList"></div>
+  </div>
+  <div id="cmdkOverlay" class="overlay"></div>
+  <div id="toasts" aria-live="polite"></div>

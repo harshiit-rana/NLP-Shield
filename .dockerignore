@@ -1,0 +1,13 @@
+.git
+myenv
+myenv311
+out
+__pycache__
+*.pyc
+pseudonymiser.db
+.pseudonymiser.key
+outputs
+*.zip
+1.txt
+vaultdoc/node_modules
+vaultdoc/dist

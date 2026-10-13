@@ -1,0 +1,2382 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>NLP Shield — Redact · Restore · Chat</title>
+<meta name="description" content="NLP Shield pseudonymises confidential documents so teams can safely use AI, then restores real identities from locally-held mapping keys." />
+<meta name="color-scheme" content="dark" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23fafafa'/%3E%3Cpath d='M16 5.5l8.5 3.5v7.2c0 5-3.8 8-8.5 9.8-4.7-1.8-8.5-4.8-8.5-9.8V9L16 5.5z' fill='none' stroke='%2309090b' stroke-width='2.2'/%3E%3Cpath d='M11.5 16.3l3.2 3.2 5.8-6.4' fill='none' stroke='%2309090b' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<!-- Tailwind CSS (CDN) — spacing/type utilities; the design system below is the source of truth -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  (function () { if (!window.tailwind) return;
+    window.tailwind.config = { theme: { extend: {
+      colors: { ink: '#09090b', panel: '#0e0e11', line: '#27272a', zincx: '#a1a1aa', dimx: '#71717a', okx: '#10b981' }
+    } } };
+  })();
+</script>
+<!-- Lucide icons (CDN) -->
+<script src="https://unpkg.com/lucide@0.462.0/dist/umd/lucide.min.js"></script>
+
+<style>
+/* =========================================================================
+   VaultDoc — design system. Flat, high-contrast, Linear/Vercel discipline.
+   No gradients, no glow, no glass: hairlines, solid fills, big padding.
+   ========================================================================= */
+:root{
+  --bg:#09090b;               /* zinc-950 */
+  --bg-soft:#0c0c0e;
+  --panel:#0e0e11;
+  --panel-hi:#121215;
+  --raised:#18181b;           /* zinc-900 */
+  --hover:#1f1f23;
+  --line:#27272a;             /* zinc-800  */
+  --line2:#3f3f46;            /* zinc-700  */
+  --line3:#52525b;
+  --text:#fafafa;
+  --muted:#a1a1aa;
+  --dim:#71717a;
+  --ok:#10b981;
+  --ok-soft:#6ee7b7;
+  --warn:#fbbf24;
+  --err:#fb7185;
+  --r:10px; --r-lg:12px; --r-sm:7px;
+  --side:232px;
+  --depth:0 1px 2px rgba(0,0,0,.4);
+  /* subdued category ink (legible on dark, no neon) */
+  --c-person:#7dd3fc; --c-org:#a5b4fc; --c-money:#fcd34d; --c-email:#6ee7b7; --c-phone:#fda4af;
+  --c-date:#bef264; --c-address:#93c5fd; --c-url:#fdba74; --c-id:#d4d4d8;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--text);
+  font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;
+  font-size:13.5px;line-height:1.55;-webkit-font-smoothing:antialiased;overflow:hidden}
+h1,h2,h3,h4{font:600 1em/1.25 Inter,system-ui,sans-serif;letter-spacing:-.02em;margin:0}
+.mono,code,kbd,pre{font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,menlo,monospace}
+::selection{background:rgba(16,185,129,.28);color:#fff}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+input,textarea,select{font:inherit;color:inherit}
+textarea{resize:none}
+:focus-visible{outline:2px solid rgba(250,250,250,.35);outline-offset:2px;border-radius:6px}
+.hidden{display:none!important}
+[data-lucide]{width:1em;height:1em;stroke-width:1.8}
+
+/* ── app frame ─────────────────────────────────────────────────────────── */
+.shell{display:grid;grid-template-columns:var(--side) minmax(0,1fr);height:100vh;background:var(--bg)}
+main{flex:1;min-height:0;overflow:hidden;width:100%}
+.content{max-width:1160px;margin:0 auto;width:100%}
+
+/* sidebar */
+.side{display:flex;flex-direction:column;border-right:1px solid var(--line);background:var(--bg-soft);padding:14px 10px;gap:2px;z-index:10;min-width:0}
+.side-brand{display:flex;align-items:center;gap:9px;padding:2px 8px 14px}
+.side-logo{width:26px;height:26px;border-radius:7px;background:#fafafa;color:#09090b;display:grid;place-items:center;flex:none}
+.side-logo i{width:14px;height:14px;stroke-width:2.2}
+.side-name{font-weight:600;font-size:13px;letter-spacing:-.01em}
+.side-ver{font-size:10px;color:var(--dim);margin-left:auto}
+.side-label{font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);padding:12px 8px 5px}
+.side-item{display:flex;align-items:center;gap:9px;width:100%;padding:6px 8px;border-radius:var(--r-sm);color:var(--muted);
+  font-size:12.8px;font-weight:500;transition:background .12s,color .12s;text-align:left}
+.side-item i{width:15px;height:15px;flex:none}
+.side-item:hover{background:var(--raised);color:var(--text)}
+.side-item.on{background:var(--raised);color:var(--text);box-shadow:inset 0 0 0 1px var(--line)}
+.side-item [data-badge]{margin-left:auto}
+.side-kbd{margin-left:auto;font-size:10px;color:var(--dim);font-family:"JetBrains Mono"}
+.side-badge{margin-left:auto;min-width:17px;height:16px;padding:0 5px;border-radius:8px;background:var(--line2);color:var(--text);
+  font-size:10px;font-weight:600;display:grid;place-items:center;font-family:"JetBrains Mono"}
+.side-badge:empty{display:none}
+.side-foot{margin-top:auto;padding:10px 8px 2px;border-top:1px solid var(--line);display:flex;align-items:center;gap:7px;font-size:11px;color:var(--dim)}
+.side-foot .dot{flex:none}
+
+/* top bar */
+.topbar{height:52px;flex:none;display:flex;align-items:center;gap:12px;padding:0 20px;border-bottom:1px solid var(--line);background:var(--bg-soft)}
+.crumb{display:flex;align-items:center;gap:8px;font-size:12.8px;min-width:0}
+.crumb .sep{color:var(--line3)}
+.crumb b{font-weight:600;color:var(--text)}
+.crumb span{color:var(--dim)}
+.topbar .spacer{flex:1}
+
+/* ── surfaces ──────────────────────────────────────────────────────────── */
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-lg)}
+.card-flat{background:var(--bg-soft);border:1px solid var(--line);border-radius:var(--r)}
+.card-hd{display:flex;align-items:center;gap:9px;padding:12px 16px;border-bottom:1px solid var(--line)}
+.card-hd .ttl{font-weight:600;font-size:12.8px;color:var(--text)}
+.card-hd i.hd{color:var(--dim);width:14px;height:14px}
+.card-bd{padding:16px}
+.hair{height:1px;background:var(--line)}
+.eyebrow{font-size:10px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--dim)}
+.sub{color:var(--muted);font-size:12.5px}
+.mut{color:var(--muted)} .dim{color:var(--dim)}
+
+/* ── buttons ───────────────────────────────────────────────────────────── */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:8px;font-size:12.5px;font-weight:500;
+  border:1px solid var(--line2);background:var(--raised);color:var(--text);
+  transition:background .12s,border-color .12s,color .12s;white-space:nowrap;user-select:none}
+.btn i{width:14px;height:14px;flex:none}
+.btn:hover{background:var(--hover);border-color:var(--line3)}
+.btn:active{transform:translateY(.5px)}
+.btn:disabled{opacity:.45;pointer-events:none}
+.btn-primary{background:#fafafa;border-color:#fafafa;color:#0a0a0a;font-weight:600}
+.btn-primary:hover{background:#e4e4e7;border-color:#e4e4e7}
+.btn-ok{border-color:rgba(16,185,129,.4);background:rgba(16,185,129,.1);color:var(--ok-soft)}
+.btn-ok:hover{background:rgba(16,185,129,.16);border-color:rgba(16,185,129,.55)}
+.btn-danger{border-color:var(--line);background:transparent;color:var(--muted)}
+.btn-danger:hover{color:#fda4af;border-color:rgba(251,113,133,.45);background:rgba(251,113,133,.08)}
+.btn-ghost{background:transparent;border-color:transparent;color:var(--muted)}
+.btn-ghost:hover{background:var(--raised);border-color:transparent;color:var(--text)}
+.btn-sm{padding:5px 9px;font-size:11.5px;border-radius:7px;gap:5px}
+.btn-sm i{width:13px;height:13px}
+.btn-lg{padding:9px 16px;font-size:13px;border-radius:9px}
+
+/* ── form controls ─────────────────────────────────────────────────────── */
+.field{width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:8px;padding:8px 11px;
+  font-size:12.8px;color:var(--text);transition:border-color .12s,box-shadow .12s}
+.field::placeholder{color:var(--dim)}
+.field:focus{outline:none;border-color:var(--line3);box-shadow:0 0 0 3px rgba(250,250,250,.06)}
+textarea.field{line-height:1.7}
+.kbd{padding:2px 6px;border-radius:5px;border:1px solid var(--line2);background:var(--raised);font-size:10px;color:var(--muted);font-family:"JetBrains Mono"}
+input[type=range]{height:3px;border-radius:99px;background:var(--line2);appearance:none;outline:none;width:100%}
+input[type=range]::-webkit-slider-thumb{appearance:none;width:13px;height:13px;border-radius:50%;background:#fafafa;border:3px solid var(--line2);cursor:pointer}
+
+.switch{width:36px;height:20px;border-radius:99px;border:1px solid var(--line2);background:var(--raised);position:relative;flex:none;cursor:pointer;transition:background .18s,border-color .18s;display:inline-block}
+.switch::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:var(--dim);transition:transform .18s,background .18s}
+.switch.on{background:var(--ok);border-color:var(--ok)}
+.switch.on::after{transform:translateX(16px);background:#fff}
+.switch-lg{width:42px;height:23px}
+.switch-lg::after{width:17px;height:17px}
+.switch-lg.on::after{transform:translateX(19px)}
+
+/* ── pills / status ────────────────────────────────────────────────────── */
+.pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:99px;font-size:11px;font-weight:500;
+  border:1px solid var(--line2);background:var(--raised);color:var(--muted);white-space:nowrap}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--ok);flex:none}
+.dot.warn{background:var(--warn)}
+.dot.err{background:var(--err)}
+.dot.off{background:var(--dim)}
+.dot.live{box-shadow:0 0 0 3px rgba(16,185,129,.18)}
+
+/* ── privacy tokens ────────────────────────────────────────────────────── */
+.tok{display:inline-flex;align-items:center;gap:5px;padding:1px 6px;border-radius:6px;font-family:"JetBrains Mono";
+  font-size:.88em;font-weight:500;white-space:nowrap;cursor:default;transition:background .12s,border-color .12s;
+  border:1px solid var(--tc,rgba(212,212,216,.28));background:var(--tb,rgba(212,212,216,.07));color:var(--tt,#d4d4d8)}
+.tok i{width:11px;height:11px;opacity:.8}
+.tok:hover{background:var(--th,rgba(212,212,216,.14))}
+.tok.dim{opacity:.22}
+.tok-hit{animation:tokIn .25s ease-out both}
+@keyframes tokIn{from{opacity:0}to{opacity:1}}
+[data-c="PERSON"]{--tc:rgba(125,211,252,.35);--tb:rgba(125,211,252,.08);--tt:var(--c-person);--th:rgba(125,211,252,.15)}
+[data-c="ORGANIZATION"]{--tc:rgba(165,180,252,.35);--tb:rgba(165,180,252,.08);--tt:var(--c-org);--th:rgba(165,180,252,.15)}
+[data-c="MONEY"]{--tc:rgba(252,211,77,.32);--tb:rgba(252,211,77,.08);--tt:var(--c-money);--th:rgba(252,211,77,.15)}
+[data-c="EMAIL"]{--tc:rgba(110,231,183,.32);--tb:rgba(110,231,183,.08);--tt:var(--c-email);--th:rgba(110,231,183,.15)}
+[data-c="PHONE"]{--tc:rgba(253,164,175,.32);--tb:rgba(253,164,175,.08);--tt:var(--c-phone);--th:rgba(253,164,175,.15)}
+[data-c="DATE"]{--tc:rgba(190,242,100,.3);--tb:rgba(190,242,100,.07);--tt:var(--c-date);--th:rgba(190,242,100,.13)}
+[data-c="ADDRESS"]{--tc:rgba(147,197,253,.32);--tb:rgba(147,197,253,.08);--tt:var(--c-address);--th:rgba(147,197,253,.15)}
+[data-c="URL"]{--tc:rgba(253,186,116,.32);--tb:rgba(253,186,116,.08);--tt:var(--c-url);--th:rgba(253,186,116,.15)}
+[data-c="ID"]{--tc:rgba(212,212,216,.26);--tb:rgba(212,212,216,.06);--tt:var(--c-id);--th:rgba(212,212,216,.12)}
+.tok-unresolved{border-style:dashed;--tc:rgba(251,191,36,.45);--tb:rgba(251,191,36,.07);--tt:var(--warn);--th:rgba(251,191,36,.13)}
+.restored{padding:1px 5px;border-radius:5px;background:rgba(16,185,129,.14);border:1px solid rgba(16,185,129,.42);color:#c8f5e3;font-weight:500}
+.restoring{animation:restIn .35s ease-out}
+@keyframes restIn{from{opacity:.2}to{opacity:1}}
+.on-hit{box-shadow:0 0 0 2px rgba(250,250,250,.35)}
+
+/* redacted markers in the source pane */
+.red{border-radius:5px;padding:1px 5px;font-weight:500;background:rgba(250,250,250,.05);box-shadow:inset 0 0 0 1px var(--line2)}
+.red[data-c]{background:var(--tb);box-shadow:inset 0 0 0 1px var(--tc)}
+.masked .red{color:transparent;text-shadow:0 0 9px rgba(228,228,231,.7);filter:blur(3.5px);transition:filter .2s,text-shadow .2s}
+.masked .red:hover{filter:blur(1px);color:var(--muted)}
+.revealed .red{color:var(--text);text-shadow:none;filter:none;background:rgba(251,191,36,.1);box-shadow:inset 0 0 0 1px rgba(251,191,36,.4)}
+
+/* ── dropzone ──────────────────────────────────────────────────────────── */
+.dz{border:1.5px dashed var(--line2);border-radius:var(--r-lg);background:var(--panel);
+  transition:border-color .15s,background .15s}
+.dz:hover{border-color:var(--line3);background:var(--panel-hi)}
+.dz.over{border-color:var(--ok);background:rgba(16,185,129,.05)}
+.dz-ic{width:40px;height:40px;border-radius:10px;background:var(--raised);border:1px solid var(--line2);
+  display:grid;place-items:center;color:var(--muted);flex:none}
+.dz-ic i{width:18px;height:18px}
+
+/* ── busy pipeline ─────────────────────────────────────────────────────── */
+.step{display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:8px;border:1px solid var(--line);background:var(--bg-soft);color:var(--dim);transition:border-color .15s,background .15s,color .15s}
+.step .num{width:20px;height:20px;border-radius:6px;display:grid;place-items:center;font-size:10px;font-weight:600;background:var(--raised);border:1px solid var(--line2);flex:none;font-family:"JetBrains Mono"}
+.step.active{color:var(--text);border-color:var(--line3);background:var(--raised)}
+.step.done{color:var(--ok-soft);border-color:rgba(16,185,129,.3);background:rgba(16,185,129,.06)}
+.step.done .num{color:var(--ok-soft);border-color:rgba(16,185,129,.4);background:rgba(16,185,129,.12)}
+.bar{height:3px;border-radius:99px;background:var(--line);overflow:hidden}
+.bar>i{display:block;height:100%;border-radius:99px;background:#fafafa;transition:width .4s ease}
+
+/* ── stats ─────────────────────────────────────────────────────────────── */
+.stat{padding:14px 16px;border-radius:var(--r);border:1px solid var(--line);background:var(--panel)}
+.stat .v{font-weight:600;font-size:22px;letter-spacing:-.02em;line-height:1.1;font-variant-numeric:tabular-nums}
+.stat .l{font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
+.stat:hover{background:var(--panel-hi)}
+
+/* chips / segmented control */
+.chip{display:inline-flex;align-items:center;gap:6px;padding:5px 9px;border-radius:7px;font-size:11.5px;font-weight:500;
+  border:1px solid var(--line2);background:transparent;color:var(--muted);transition:background .12s,color .12s,border-color .12s;cursor:pointer}
+.chip:hover{color:var(--text);background:var(--raised);border-color:var(--line3)}
+.chip.on{color:var(--text);border-color:var(--tt,#52525b);background:color-mix(in srgb,var(--tt,#52525b) 12%,transparent)}
+.chip .cnt{font-family:"JetBrains Mono";font-size:10px;padding:1px 5px;border-radius:4px;background:var(--raised);color:var(--text)}
+.seg{display:inline-flex;padding:3px;gap:2px;border-radius:9px;border:1px solid var(--line);background:var(--bg-soft)}
+.seg button{padding:5px 11px;border-radius:6px;font-size:12px;font-weight:500;color:var(--dim);transition:background .12s,color .12s;display:inline-flex;align-items:center;gap:6px}
+.seg button i{width:13px;height:13px}
+.seg button:hover{color:var(--muted)}
+.seg button.on{background:var(--raised);color:var(--text);box-shadow:inset 0 0 0 1px var(--line2)}
+
+/* ── panes (mono + generous padding) ───────────────────────────────────── */
+.pane{background:var(--bg-soft);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;position:relative}
+.pane-hd{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 14px;border-bottom:1px solid var(--line);background:var(--panel)}
+.pane-hd .txt{font-size:10.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
+.pane-bd{padding:18px 20px;font-size:12.6px;line-height:1.9;white-space:pre-wrap;word-break:break-word;overflow-y:auto;max-height:440px;color:#c9c9cf}
+.pane-bd.doc{font-family:"JetBrains Mono";font-size:12px;line-height:2;color:#b8b8c0}
+.lock-veil{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:20px;background:rgba(9,9,11,.72);backdrop-filter:blur(7px);z-index:30;transition:opacity .18s,visibility .18s}
+.lock-veil.hide{opacity:0;visibility:hidden}
+.lock-veil .box{max-width:340px}
+
+/* ── table ─────────────────────────────────────────────────────────────── */
+.tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:12.2px}
+.tbl th{text-align:left;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);font-weight:600;
+  padding:9px 14px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--panel);z-index:2}
+.tbl td{padding:9px 14px;border-bottom:1px solid rgba(39,39,42,.6);color:var(--muted);vertical-align:middle}
+.tbl tbody tr{transition:background .1s}
+.tbl tbody tr:hover{background:var(--panel-hi)}
+.tbl tbody tr:hover td{color:var(--text)}
+
+/* ── chat ──────────────────────────────────────────────────────────────── */
+.bubble{padding:12px 16px;border-radius:12px;font-size:13px;line-height:1.75;border:1px solid var(--line)}
+.bubble.user{background:var(--raised);border-color:var(--line2);margin-left:auto;border-bottom-right-radius:4px;max-width:82%}
+.bubble.ai{background:var(--bg-soft);border-bottom-left-radius:4px;flex:1}
+.typing{display:inline-flex;gap:4px;padding:4px 0}
+.typing i{width:5px;height:5px;border-radius:50%;background:var(--dim);animation:tp 1s infinite}
+.typing i:nth-child(2){animation-delay:.15s}.typing i:nth-child(3){animation-delay:.3s}
+@keyframes tp{0%,60%,100%{opacity:.35;transform:translateY(0)}30%{opacity:1;transform:translateY(-3px)}}
+.msg-body p{margin:4px 0}
+.msg-body b{font-weight:600}
+.ava{width:26px;height:26px;border-radius:7px;display:grid;place-items:center;flex:none;border:1px solid rgba(16,185,129,.35);background:rgba(16,185,129,.08);color:var(--ok-soft);margin-top:2px}
+.ava i{width:13px;height:13px}
+.model-card{padding:9px 11px;border-radius:8px;border:1px solid var(--line);background:transparent;text-align:left;transition:border-color .12s,background .12s;width:100%}
+.model-card:hover{background:var(--raised);border-color:var(--line2)}
+.model-card.on{border-color:rgba(16,185,129,.5);background:rgba(16,185,129,.07)}
+
+/* code-block */
+.code-block{background:var(--bg-soft);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;
+  font-family:"JetBrains Mono";font-size:11.3px;line-height:1.8;color:var(--muted);white-space:pre-wrap;word-break:break-word}
+
+/* ── views & transitions (instant, no staged slide-ins) ────────────────── */
+.view{display:none;height:100%;overflow-y:auto;overscroll-behavior:contain}
+.view.on{display:block;animation:viewIn .12s ease-out}
+@keyframes viewIn{from{opacity:.4}to{opacity:1}}
+
+/* ── overlays (strict z-index scale) ───────────────────────────────────── */
+/* base 0 · sidebar/topbar 10-20 · in-card veils 30 · scrims 40 · drawer 50 · modal 60 · cmdk 70 · toasts 100 */
+.overlay{position:fixed;inset:0;z-index:40;background:rgba(0,0,0,.6);opacity:0;visibility:hidden;transition:opacity .18s,visibility .18s}
+.overlay.on{opacity:1;visibility:visible}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(420px,92vw);z-index:50;background:var(--bg-soft);border-left:1px solid var(--line);
+  transform:translateX(100%);transition:transform .22s ease;display:flex;flex-direction:column}
+.drawer.on{transform:none}
+.modal{position:fixed;z-index:60;left:50%;top:50%;width:min(560px,94vw);translate:-50% -50%;opacity:0;visibility:hidden;transition:opacity .18s,visibility .18s}
+.modal.on{opacity:1;visibility:visible}
+.cmdk{position:fixed;z-index:70;left:50%;top:14vh;translate:-50% 0;width:min(580px,94vw);opacity:0;visibility:hidden;transition:opacity .16s,visibility .16s,translate .16s;transform:translateY(-6px)}
+.cmdk.on{opacity:1;visibility:visible;transform:none}
+.cmd-row{display:flex;align-items:center;gap:10px;padding:8px 11px;border-radius:7px;cursor:pointer;color:var(--muted);transition:background .1s,color .1s;font-size:12.8px}
+.cmd-row.sel,.cmd-row:hover{background:var(--raised);color:var(--text)}
+
+/* toasts — fixed stack, above everything, never under panels */
+#toasts{position:fixed;z-index:100;right:20px;bottom:20px;display:flex;flex-direction:column;gap:8px;align-items:flex-end;pointer-events:none}
+.toast{display:flex;align-items:center;gap:9px;padding:10px 13px;border-radius:9px;min-width:250px;max-width:380px;pointer-events:auto;
+  background:var(--panel-hi);border:1px solid var(--line2);box-shadow:var(--depth),0 12px 32px -12px rgba(0,0,0,.7);
+  animation:toastIn .22s ease-out both;font-size:12.5px}
+.toast.out{animation:toastOut .18s ease forwards}
+@keyframes toastIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes toastOut{to{opacity:0;transform:translateY(6px)}}
+.toast .ic{width:22px;height:22px;border-radius:6px;display:grid;place-items:center;flex:none;background:rgba(16,185,129,.12);color:var(--ok-soft)}
+.toast .ic i{width:12px;height:12px}
+
+/* scrollbars */
+*::-webkit-scrollbar{width:9px;height:9px}
+*::-webkit-scrollbar-track{background:transparent}
+*::-webkit-scrollbar-thumb{background:var(--line2);border-radius:99px;border:2px solid transparent;background-clip:padding-box}
+*::-webkit-scrollbar-thumb:hover{background:var(--line3);background-clip:padding-box}
+
+/* misc */
+.spin{animation:spin .9s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.flash-in{animation:viewIn .15s ease-out both}
+.txt-err{color:var(--err);font-weight:600}
+.txt-ok{color:var(--ok-soft)}
+.link-btn{color:var(--muted);text-decoration:underline;text-decoration-style:dotted;text-underline-offset:3px}
+.link-btn:hover{color:var(--text)}
+
+/* ── calm workspace layout ─────────────────────────────────────────────── */
+.main-column{display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden}
+.redact-work{display:none}
+.redact-work.active{display:block}
+.empty-page{min-height:100%;display:flex;flex-direction:column;justify-content:center;padding:48px 28px 64px;max-width:900px;margin:0 auto}
+.empty-heading{font-size:26px;font-weight:600;letter-spacing:-.035em}
+.empty-copy{font-size:13px;color:var(--muted);margin-top:8px;max-width:54ch;line-height:1.7}
+.drop-main{margin-top:28px;min-height:230px;display:flex;align-items:center;justify-content:center;padding:36px}
+.drop-content{display:flex;flex-direction:column;align-items:center;text-align:center;max-width:520px}
+.drop-content .dz-ic{width:44px;height:44px;margin-bottom:17px}
+.drop-content h2{font-size:15px;font-weight:600}
+.drop-content p{font-size:12px;color:var(--dim);margin-top:6px}
+.result-head{display:flex;align-items:center;gap:14px;padding:17px 20px;margin-bottom:16px}
+.result-head .doc-mark{width:34px;height:34px;border:1px solid var(--line2);border-radius:8px;display:grid;place-items:center;color:var(--muted);flex:none}
+.result-head .doc-mark i{width:16px;height:16px}
+.result-card{overflow:hidden}
+.result-title{font-size:13.5px;font-weight:600}
+.result-grid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line)}
+.result-grid>.pane{border:0;border-radius:0;min-width:0}
+.result-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.keys-details{margin-top:14px;overflow:hidden}
+.keys-details>summary{display:flex;align-items:center;gap:10px;list-style:none;cursor:pointer;padding:16px 18px;color:var(--text);font-weight:600;font-size:12.8px}
+.keys-details>summary::-webkit-details-marker{display:none}
+.keys-details>summary:hover{background:var(--panel-hi)}
+.keys-details>summary .summary-count{font:11px "JetBrains Mono";font-weight:400;color:var(--dim);margin-left:2px}
+.keys-details>summary .chev{margin-left:auto;color:var(--dim);transition:transform .16s}
+.keys-details[open]>summary .chev{transform:rotate(180deg)}
+.keys-body{border-top:1px solid var(--line)}
+.restore-page{max-width:1240px}
+.restore-layout{align-items:stretch}
+.restore-panel{min-width:0;min-height:560px;display:flex;flex-direction:column}
+.restore-panel .card-bd{flex:1;display:flex;flex-direction:column;gap:14px}
+.restore-text{flex:1;min-height:350px}
+.restore-output{min-height:450px}
+.restore-output .pane-bd{min-height:380px;max-height:none}
+.restore-foot{display:flex;align-items:center;gap:10px;padding:12px 16px;border-top:1px solid var(--line)}
+.restore-status{font-size:11.5px;color:var(--dim);line-height:1.5}
+.key-source-label{font-size:11.5px;color:var(--dim)}
+.csv-compact{padding:13px 15px;text-align:left}
+.csv-compact .csv-title{font-size:12px;font-weight:500}
+.chat-page{height:100%;display:flex;flex-direction:column;max-width:1200px}
+.chat-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:16px;flex:none}
+.chat-window{flex:1;min-height:360px;display:flex;flex-direction:column;overflow:hidden}
+.chat-log{flex:1;min-height:0;overflow-y:auto;padding:24px clamp(18px,4vw,48px);align-content:start}
+.chat-input-area{padding:14px 18px;background:var(--panel);border-top:1px solid var(--line)}
+.advanced{position:relative;flex:none}
+.advanced>summary{display:inline-flex;align-items:center;gap:7px;list-style:none;cursor:pointer;padding:8px 11px;border:1px solid var(--line2);border-radius:8px;color:var(--muted);font-size:11.8px;background:var(--bg-soft)}
+.advanced>summary::-webkit-details-marker{display:none}
+.advanced>summary:hover{color:var(--text);background:var(--raised)}
+.advanced[open]>summary{color:var(--text);border-color:var(--line3)}
+.advanced-panel{margin-top:10px;padding:18px;border:1px solid var(--line);border-radius:10px;background:var(--panel);display:grid;gap:14px}
+.advanced-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.advanced-group{min-width:0;padding:13px;border:1px solid var(--line);border-radius:8px;background:var(--bg-soft)}
+.advanced-group h3{font-size:11.5px;font-weight:600;margin-bottom:10px}
+.advanced-full{grid-column:1/-1}
+.advanced-controls{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.restore-result-actions{display:flex;align-items:center;gap:6px}
+.restore-result-actions .hidden{display:none!important}
+.view.on{animation:none}
+
+@media (max-width:1100px){:root{--side:64px}.side .side-name,.side .side-ver,.side .side-kbd,.side-label,.side-foot .txt{display:none}.side-item{justify-content:center;padding:8px}.side-item>span:not(.side-badge){display:none}.side-item i{margin:0}.side-badge{position:absolute;top:2px;right:2px}}
+@media (max-width:900px){.result-grid{grid-template-columns:1fr}.restore-panel{min-height:0}.restore-text{min-height:260px}.restore-output{min-height:340px}.restore-output .pane-bd{min-height:260px}}
+@media (max-width:760px){
+  .shell{grid-template-columns:1fr;grid-template-rows:minmax(0,1fr) 58px}
+  .main-column{grid-row:1}
+  .side{grid-row:2;flex-direction:row;justify-content:space-around;align-items:stretch;border:0;border-top:1px solid var(--line);padding:5px 8px;gap:5px}
+  .side-brand,.side-label,.side-foot{display:none}
+  .side-item{position:relative;flex:1;flex-direction:column;justify-content:center;gap:3px;padding:4px 2px;font-size:10px}
+  .side-item span:not(.side-badge){display:inline!important;font-size:10px}
+  .side-item i{width:16px;height:16px}
+  .side-badge{position:absolute;top:1px;right:calc(50% - 18px)}
+  .topbar{padding:0 14px}
+  .topbar .cmd-trigger{display:none}
+  .content{padding:20px 16px!important}
+  .empty-page{padding:36px 18px}
+  .drop-main{padding:28px 18px;min-height:210px}
+  .result-head{padding:14px;align-items:flex-start}
+  .result-head .actions{width:100%;justify-content:flex-start}
+  .restore-layout{grid-template-columns:1fr!important}
+  .restore-panel{min-height:0}
+  .restore-text{min-height:230px}
+  .chat-page{padding:18px 14px!important}
+  .chat-window{min-height:calc(100dvh - 160px)}
+  .advanced[open] .advanced-panel{max-height:55vh;overflow:auto}
+  .advanced-grid{grid-template-columns:1fr}
+  .advanced-full{grid-column:auto}
+  #toasts{right:10px;bottom:68px;left:10px;align-items:stretch}
+  .toast{min-width:0;max-width:none}
+}
+
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.001s!important;transition-duration:.01s!important}}
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <!-- ══ sidebar ═════════════════════════════════════════════════════════ -->
+  <aside class="side">
+    <div class="side-brand">
+      <span class="side-logo"><i data-lucide="shield-check"></i></span>
+      <span class="side-name">NLP Shield</span>
+      <span class="side-ver">v1.4</span>
+    </div>
+
+    <p class="side-label">Workspace</p>
+    <button class="side-item on" data-view="redact"><i data-lucide="file-lock-2"></i><span>Redact</span></button>
+    <button class="side-item" data-view="restore"><i data-lucide="wand-sparkles"></i><span>Restore</span></button>
+    <button class="side-item" data-view="chat" id="railChat"><i data-lucide="messages-square"></i><span>AI Chat</span><span class="side-badge" data-badge=""></span></button>
+
+    <div class="side-foot">
+      <span class="dot" id="footDot"></span>
+      <span class="txt" id="footStatus">Sandbox engine</span>
+    </div>
+  </aside>
+
+  <!-- ══ main column ═════════════════════════════════════════════════════ -->
+  <div class="main-column">
+    <header class="topbar">
+      <div class="crumb">
+        <span>NLP Shield</span><span class="sep">/</span><b id="viewTitle">Redact</b>
+      </div>
+      <div class="spacer"></div>
+      <button class="btn btn-sm btn-ghost" id="btnVault" title="Key vault"><i data-lucide="key-round"></i><span class="hidden sm:inline">Key vault</span></button>
+    </header>
+
+    <main>
+      <!-- ══════════════ VIEW 1 · REDACT ══════════════ -->
+      <section class="view on" id="view-redact">
+        <div class="content empty-page" id="redactEmpty">
+          <h1 class="empty-heading">Redact a document</h1>
+          <p class="empty-copy">Remove sensitive details before sharing with AI. Your source stays private; only the scrubbed text leaves your device.</p>
+          <div class="dz drop-main" id="dropzone" role="button" tabindex="0" aria-label="Upload a document to redact">
+            <div class="drop-content">
+              <div class="dz-ic"><i data-lucide="upload"></i></div>
+              <h2>Drop a file here</h2>
+              <p>PDF, DOCX, image or text · up to 25 MB</p>
+              <div class="flex items-center justify-center gap-3 mt-5">
+                <button class="btn btn-primary" id="btnBrowse"><i data-lucide="folder-open"></i> Choose file</button>
+                <button class="link-btn" id="btnSample" style="font-size:12px">Try a sample</button>
+                <input id="fileInput" type="file" class="hidden" accept=".pdf,.docx,.png,.jpg,.jpeg,.webp,.txt,.md,.csv,.eml" />
+              </div>
+              <p class="mt-4" style="font-size:11px">Sandbox mode processes files locally in your browser.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content redact-work px-8 pt-7 pb-10" id="redactWork">
+
+          <!-- processing state -->
+          <div id="redactBusy" class="card hidden">
+            <div class="card-hd">
+              <i data-lucide="loader-2" class="hd spin"></i>
+              <span class="ttl">Scrubbing <span class="mono mut" id="busyName">document.pdf</span></span>
+              <span class="mono dim ml-auto" style="font-size:11px" id="busyPct">0%</span>
+            </div>
+            <div class="card-bd">
+              <div class="grid gap-2 sm:grid-cols-2 xl:grid-cols-4" id="busySteps"></div>
+              <div class="bar mt-4"><i id="busyBar" style="width:4%"></i></div>
+              <p class="dim mt-3" style="font-size:11.5px" id="busyNote">Extracting…</p>
+            </div>
+          </div>
+
+          <div id="redactResult" class="hidden">
+            <div class="result-head card">
+              <div class="doc-mark"><i data-lucide="file-check-2"></i></div>
+              <div class="min-w-0 flex-1"><p class="text-[13px] font-semibold truncate" id="docName">—</p><p class="dim mt-0.5" style="font-size:11px"><span id="docSize">—</span><span class="hidden" id="docType"></span><span class="hidden" id="docHash"></span><span class="hidden" id="runId"></span></p></div>
+              <button class="btn btn-sm" id="btnNewDoc"><i data-lucide="plus"></i> New document</button>
+            </div>
+            <div class="card result-card">
+              <div class="card-hd flex-wrap">
+                <div class="min-w-0 flex-1"><p class="result-title">Scrubbed text</p><p class="dim mt-0.5" style="font-size:11px">Ready to use with your AI tools</p></div>
+                <div class="result-actions">
+                  <button class="btn btn-sm" data-act="copy-scrubbed"><i data-lucide="copy"></i> Copy text</button>
+                  <button class="btn btn-sm" id="btnDownloadCsv"><i data-lucide="download"></i> Download CSV</button>
+                  <button class="btn btn-sm btn-primary" id="btnSendToChat"><i data-lucide="messages-square"></i> Send to chat</button>
+                </div>
+              </div>
+              <div class="result-grid">
+                <div class="pane masked" id="paneOriginalWrap">
+                  <div class="pane-hd"><span class="txt">Original · private</span><button class="btn btn-sm btn-ghost" id="btnReveal"><i data-lucide="eye"></i> Reveal briefly</button></div>
+                  <div class="pane-bd doc" id="paneOriginal"></div>
+                  <div class="lock-veil" id="lockVeil"><div class="box"><i data-lucide="eye-off" style="width:18px;height:18px;color:var(--muted);margin:0 auto"></i><p class="mt-3 text-[13px] font-semibold">Original text is hidden</p><p class="dim mt-1" style="font-size:11.5px">Reveal for 8 seconds on a private screen.</p><button class="btn btn-sm mt-3" data-act="reveal"><i data-lucide="unlock"></i> Reveal text</button></div></div>
+                </div>
+                <div class="pane"><div class="pane-hd"><span class="txt">Scrubbed · safe to share</span></div><div class="pane-bd doc" id="paneScrubbed"></div></div>
+              </div>
+            </div>
+            <details class="card keys-details" id="keysDetails">
+              <summary><i data-lucide="key-round" style="width:14px;height:14px;color:var(--dim)"></i><span>Mapping keys</span><span class="summary-count" id="keyCount">0 keys</span><i data-lucide="chevron-down" class="chev" style="width:14px;height:14px"></i></summary>
+              <div class="keys-body"><div class="flex items-center justify-end p-3" style="border-bottom:1px solid var(--line)"><div class="relative"><i data-lucide="search" style="width:12px;height:12px;position:absolute;left:9px;top:8px;color:var(--dim)"></i><input class="field !py-1.5 !pl-7 w-[210px]" style="font-size:11.5px" id="keySearch" placeholder="Filter keys…" /></div></div>
+                <div class="max-h-[340px] overflow-auto"><table class="tbl"><thead><tr><th>Token</th><th>Category</th><th>Original value</th><th class="text-right">Uses</th></tr></thead><tbody id="keyBody"></tbody></table></div>
+              </div>
+            </details>
+          </div>
+        </div>
+      </section>
+      <section class="view" id="view-restore">
+        <div class="content restore-page px-8 pt-8 pb-10">
+          <div class="mb-7"><h1 class="text-[22px] font-semibold tracking-tight">Restore identities</h1><p class="sub mt-1.5">Paste an AI response and replace its privacy tokens using your stored keys or a CSV file.</p></div>
+          <div class="restore-layout grid gap-5 lg:grid-cols-2">
+            <div class="card restore-panel">
+              <div class="card-hd flex-wrap"><span class="ttl">AI response</span><div class="seg ml-auto" id="srcTabs"><button class="on" data-src="vault">Use stored keys</button><button data-src="csv">Upload CSV</button></div></div>
+              <div class="card-bd">
+                <div id="srcVault" class="space-y-2">
+                  <div class="flex items-center justify-between">
+                    <p class="key-source-label text-[11.5px]">Select Key Bundle:</p>
+                    <span class="pill mono" id="loadedCount" style="font-size:10px">0 keys</span>
+                  </div>
+                  <select class="field !py-2 text-[12.5px]" id="bundleSelect">
+                    <option value="vault">Active Vault Session (All Stored Keys)</option>
+                  </select>
+                  <p class="dim text-[11px]" id="vaultKeySummary">Select which document's keys to restore.</p>
+                </div>
+                <div id="srcCsv" class="hidden"><div class="dz csv-compact" id="csvDrop"><div class="flex items-center justify-between gap-3"><div class="min-w-0"><p class="csv-title">Drop a <span class="mono">keys.csv</span> file</p><p class="dim mt-0.5" style="font-size:10.8px">The file is read locally.</p></div><button class="btn btn-sm" id="btnCsvPick"><i data-lucide="folder-open"></i> Browse</button><input type="file" id="csvInput" class="hidden" accept=".csv,text/csv" /></div></div><div id="csvInfo" class="hidden mt-2 dim" style="font-size:11px"></div></div>
+                <textarea class="field mono restore-text" id="restoreInput" rows="14" style="font-size:12px;line-height:1.9" placeholder="Paste the AI response containing tokens here…&#10;&#10;For example: ORGANIZATION_001 shall indemnify PERSON_001 within 30 days."></textarea>
+                <div class="flex items-center gap-3 flex-wrap"><div class="restore-status" id="restoreScan">No tokens detected yet.</div><div class="ml-auto flex items-center gap-2"><button class="btn btn-sm btn-ghost" id="btnPaste"><i data-lucide="clipboard-paste"></i> Paste</button><button class="btn btn-sm btn-ghost" id="btnClearRestore"><i data-lucide="x"></i> Clear</button><button class="btn btn-primary" id="btnRestoreRun2"><i data-lucide="wand-sparkles"></i> Restore</button></div></div>
+              </div>
+            </div>
+            <div class="card restore-panel restore-output" id="restoreResult">
+              <div class="card-hd"><span class="ttl">Restored text</span><div class="restore-result-actions ml-auto"><button class="btn btn-sm btn-ghost hidden" id="btnCopyRestored"><i data-lucide="copy"></i> Copy</button><button class="btn btn-sm btn-ghost hidden" id="btnDlRestored"><i data-lucide="download"></i> Download</button></div></div>
+              <div class="pane-bd" id="paneRestored"><span class="dim">Your restored response will appear here.</span></div>
+              <div class="restore-foot"><p class="restore-status" id="unresolvedNote">Your text stays on this device.</p></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="view-chat">
+        <div class="content chat-page px-8 pt-7 pb-6">
+          <div class="chat-heading">
+            <div><h1 class="text-[21px] font-semibold tracking-tight">AI Chat</h1><p class="sub mt-1">Ask questions about your scrubbed document.</p></div>
+            <button class="btn btn-sm" id="btnChatSettings"><i data-lucide="sliders-horizontal"></i> Advanced settings</button>
+          </div>
+          <div class="card chat-window">
+            <div class="card-hd !py-2.5 flex-wrap"><i data-lucide="shield-check" class="hd" style="color:var(--ok-soft)"></i><span class="ttl mono truncate" style="font-size:12px" id="chatCtx">No document attached</span><span class="pill mono" style="font-size:10px;border-color:rgba(16,185,129,.3);color:var(--ok-soft)" id="chatCtxTokens">0 keys</span><button class="btn btn-sm btn-ghost hidden" id="btnViewSentText" title="Inspect exact redacted text sent to AI"><i data-lucide="eye"></i> View sent text</button><button class="btn btn-sm btn-ghost hidden" id="btnDetachCtx"><i data-lucide="x"></i> Detach</button><span class="ml-auto mut" style="font-size:11px">Auto-restore</span><div class="switch" id="autoRestoreSwitch" role="switch" aria-checked="false" tabindex="0" title="Restore identities in your view"></div><span class="hidden" id="autoRestoreState">OFF</span></div>
+            <div class="chat-log" id="chatLog"></div>
+            <div class="chat-input-area"><div class="flex items-end gap-2"><textarea class="field !py-2.5" id="chatInput" rows="1" style="max-height:132px" placeholder="Ask about obligations, dates, or counterparties…"></textarea><button class="btn btn-primary flex-none h-[38px] px-4" id="btnSend"><i data-lucide="send-horizontal"></i> Send</button></div><div class="flex items-center gap-2 mt-2 dim" style="font-size:10.5px"><i data-lucide="shield" style="width:11px;height:11px;color:var(--ok)"></i><span>Only redacted text is sent to the model.</span><span class="hidden" id="chatEngineLabel">Sandbox engine</span><span class="hidden" id="chatChars">0</span></div></div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<!-- ══ vault drawer ═══════════════════════════════════════════════════════ -->
+<div class="overlay" id="overlay"></div>
+<aside class="drawer" id="vaultDrawer" aria-label="Key vault">
+  <div class="flex items-center gap-3 px-4" style="padding:13px 16px;border-bottom:1px solid var(--line)">
+    <div class="dz-ic" style="width:32px;height:32px;border-radius:8px"><i data-lucide="key-round" style="width:15px;height:15px"></i></div>
+    <div class="min-w-0">
+      <p style="font-size:13px;font-weight:600">Key vault</p>
+      <p class="dim" style="font-size:10.5px">Mapping keys for past runs · <span class="mono" id="vaultMode">in-memory</span></p>
+    </div>
+    <button class="btn btn-sm btn-ghost ml-auto" id="btnCloseVault"><i data-lucide="x"></i></button>
+  </div>
+  <div class="px-4 py-3 flex items-center gap-2" style="border-bottom:1px solid var(--line)">
+    <span class="eyebrow">Recent sessions</span>
+    <span class="pill ml-auto" id="vaultCount" style="font-size:10.5px">0</span>
+  </div>
+  <div class="flex-1 overflow-y-auto p-4 grid gap-3 content-start" id="sessionList"></div>
+  <div class="p-4 grid gap-2" style="border-top:1px solid var(--line)">
+    <p class="dim" style="font-size:11px">Purging deletes keys from this browser only.</p>
+    <button class="btn btn-sm w-full justify-center btn-danger" id="btnVaultPurge"><i data-lucide="trash-2"></i> Purge all keys</button>
+  </div>
+</aside>
+
+<!-- ══ chat settings drawer (slides in from right) ═══════════════════════ -->
+<aside class="drawer" id="chatDrawer" aria-label="Model & API settings">
+  <div class="flex items-center gap-3 px-4" style="padding:13px 16px;border-bottom:1px solid var(--line)">
+    <div class="dz-ic" style="width:32px;height:32px;border-radius:8px"><i data-lucide="sliders-horizontal" style="width:15px;height:15px"></i></div>
+    <div class="min-w-0">
+      <p style="font-size:13px;font-weight:600">Model & API Settings</p>
+      <p class="dim" style="font-size:10.5px">Configure Groq API & LLM parameters</p>
+    </div>
+    <button class="btn btn-sm btn-ghost ml-auto" id="btnCloseChatSettings"><i data-lucide="x"></i></button>
+  </div>
+  <div class="flex-1 overflow-y-auto p-4 space-y-4">
+    <div class="advanced-group"><div class="flex items-center justify-between gap-3 mb-3"><h3 class="!mb-0">Model</h3><span class="pill mono" id="modelBadge" style="font-size:10px">openai/gpt-oss-120b</span></div><div class="grid gap-2 sm:grid-cols-2" id="modelGrid"></div></div>
+    <div class="advanced-group"><h3>Groq API key</h3><div class="relative"><input class="field mono !pr-9" id="groqKey" type="password" placeholder="gsk_…" autocomplete="off" spellcheck="false" style="font-size:12px" /><button class="absolute" style="right:9px;top:8px;color:var(--dim)" id="btnPeekKey" aria-label="Show key"><i data-lucide="eye" style="width:14px;height:14px"></i></button></div><div class="grid gap-2.5 mt-3"><label class="flex items-center gap-2.5 mut cursor-pointer" style="font-size:11.5px"><span class="switch" id="persistSwitch" role="switch" aria-checked="false" tabindex="0"></span>Remember in this browser</label><label class="flex items-center gap-2.5 mut cursor-pointer" style="font-size:11.5px"><span class="switch" id="directSwitch" role="switch" aria-checked="false" tabindex="0"></span>Call Groq directly</label></div></div>
+    <div class="advanced-group"><h3>Generation</h3><div class="grid gap-3"><div><div class="flex justify-between mb-1.5" style="font-size:11px"><span class="mut">Temperature</span><span class="mono" id="tempVal">0.20</span></div><input type="range" min="0" max="1" step="0.05" value="0.2" id="tempRange" /></div><div><div class="flex justify-between mb-1.5" style="font-size:11px"><span class="mut">Max tokens</span><span class="mono" id="maxTokVal">3072</span></div><input type="range" min="256" max="8192" step="256" value="3072" id="maxTokRange" /></div></div></div>
+    <div class="advanced-group"><h3>System instruction</h3><textarea class="field mono" id="systemPrompt" rows="4" style="font-size:11px;line-height:1.7">You are NLP Shield AI, an expert assistant for confidential document analysis.
+
+1. The provided text is pseudonymised for privacy: sensitive entities (names, organisations, locations, dates, money, IDs) are replaced with privacy tokens like PERSON_001, ORGANIZATION_001, LOCATION_001, etc.
+2. Be conversational and cordial. Respond naturally to greetings, introducing how you can analyze the document.
+3. Provide thorough, in-depth analytical breakdowns with clear clause/section citations.
+4. CRITICAL: Preserve all privacy tokens (e.g. PERSON_001, ORGANIZATION_001) exactly verbatim in your responses so they can be seamlessly restored to their real identities.</textarea></div>
+    <div class="advanced-group"><div class="flex items-center gap-3"><span class="mut" style="font-size:11.5px">Backend connection</span><span class="pill" id="probeResult"><span class="dot off"></span> Not probed</span><button class="btn btn-sm ml-auto" id="btnProbe"><i data-lucide="activity"></i> Test</button><button class="btn btn-sm" id="btnSettings"><i data-lucide="plug-zap"></i> Connection settings</button></div><div class="hidden" id="connectionDetails"><input class="field mono mt-3" id="apiBaseInput" placeholder="http://localhost:8000" spellcheck="false" style="font-size:12px" /><div class="seg w-full mt-3" id="modeTabs"><button class="flex-1 justify-center on" data-mode="auto">Auto</button><button class="flex-1 justify-center" data-mode="live">Live</button><button class="flex-1 justify-center" data-mode="mock">Sandbox</button></div><button class="btn btn-sm btn-primary mt-3" id="btnSaveConn"><i data-lucide="check"></i> Apply connection</button></div></div>
+    <div class="advanced-group"><div class="flex items-center gap-2"><h3 class="!mb-0">Request preview</h3><button class="btn btn-sm btn-ghost ml-auto" id="btnCopyPayload"><i data-lucide="copy"></i> Copy</button></div><pre class="code-block !p-3 mt-2" style="font-size:10.5px;max-height:180px;overflow:auto;margin-bottom:0" id="payloadPreview"></pre></div>
+  </div>
+</aside>
+
+<!-- ══ sent context modal ═════════════════════════════════════════════════ -->
+<div class="modal card" id="contextModal" role="dialog" aria-label="Redacted Context Sent to AI">
+  <div class="card-hd flex items-center justify-between">
+    <div class="flex items-center gap-2">
+      <i data-lucide="shield-check" style="color:var(--ok-soft);width:16px;height:16px"></i>
+      <span class="ttl font-semibold text-[13px]">Redacted Context Sent to AI (Zero Real Identities)</span>
+    </div>
+    <button class="btn btn-sm btn-ghost" id="btnCloseContextModal"><i data-lucide="x"></i></button>
+  </div>
+  <div class="p-3 text-[11.5px] text-[var(--muted)] border-b border-[var(--line)]">
+    This is the exact pseudonymised text fed into the AI prompt. All personal identifiers (names, organisations, emails, dates) have been replaced with anonymous tokens. Your original file was never sent.
+  </div>
+  <div class="p-4 max-h-[60vh] overflow-y-auto">
+    <div class="doc" id="contextModalBody" style="font-size:12px;line-height:1.8"></div>
+  </div>
+</div>
+
+<!-- ══ command palette ════════════════════════════════════════════════════ -->
+<div class="overlay" id="cmdkOverlay"></div>
+<div class="cmdk card" id="cmdk" role="dialog" aria-label="Command palette">
+  <div class="flex items-center gap-2.5 px-3.5 py-3" style="border-bottom:1px solid var(--line)">
+    <i data-lucide="command" style="width:14px;height:14px;color:var(--muted)"></i>
+    <input class="bg-transparent border-0 outline-none flex-1" style="font-size:13px" id="cmdkInput" placeholder="Jump to a view or run an action…" spellcheck="false" />
+    <span class="kbd">esc</span>
+  </div>
+  <div class="p-2 max-h-[52vh] overflow-y-auto" id="cmdkList"></div>
+</div>
+
+<div id="toasts" aria-live="polite"></div>
+<script>
+/* ============================================================================
+   VAULTDOC — self-contained frontend runtime (vanilla ES6+, no bundler).
+   ----------------------------------------------------------------------------
+   ARCHITECTURE
+     1. CONFIG        · every integration switch in one place
+     2. apiService    · the ONLY module that talks to the FastAPI backend
+     3. Redactor      · in-browser detector swarm (powers sandbox mode)
+     4. Mock          · fixture responses so the UI is fully clickable offline
+     5. AppState      · single reactive store shared by the three workspaces
+     6. UI            · render functions + event wiring
+   ----------------------------------------------------------------------------
+   BACKEND CONTRACT (all four endpoints accept/partial-match these shapes):
+     POST /pseudorun     multipart/form-data, field "file"
+                         → { document, original_text, pseudonymized_text,
+                             keys:[{token,category,value,occurrences}], stats, run_id }
+     POST /depseudorun   { text } (+ optional multipart field "keys_file")
+                         → { restored_text, resolved[], unresolved[], source_label }
+     POST /api/chat      { message, context, model, temperature, max_tokens,
+                           system, history[], auto_restore, api_key? }
+                         → { reply }   (or text/event-stream OpenAI-style deltas)
+     GET  /api/sessions  → { sessions:[{id,document,entities,created_at,keys[]}] }
+   Field names are normalised defensively (token|placeholder, value|original|real, …)
+   so small naming differences on the Python side need no frontend change.
+   ========================================================================== */
+'use strict';
+
+/* ══ 1 · CONFIG ═══════════════════════════════════════════════════════════ */
+const CONFIG = {
+  API_BASE : '',            // 'http://localhost:8000' or '' for same-origin
+  MODE     : 'live',        // default to live
+  HEALTH   : '/health',
+  PROBE_MS : 2500,
+  MAX_MB   : 25,
+  TOKEN_RE : /\b[A-Z][A-Z0-9_]*_\d{3}\b/g,
+  GROQ_URL : 'https://api.groq.com/openai/v1/chat/completions',
+  LS_PREFS : 'vaultdoc.prefs.v2',
+  LS_VAULT : 'vaultdoc.vault.v2',
+  APP      : 'NLP Shield',
+  VERSION  : '1.4.0'
+};
+const url = (p) => (CONFIG.API_BASE || '') + p;
+const TOKEN_ONLY = /^[A-Z][A-Z0-9_]*_\d{3}$/;
+const tokenRe = () => new RegExp(CONFIG.TOKEN_RE.source, 'g');
+
+/* ══ 2 · apiService — every backend interaction lives here ════════════════ */
+const apiService = {
+  /* ── health probe: flips the workspace between Live and Sandbox ───────── */
+  async probe() {
+    try {
+      const r = await fetch(url(CONFIG.HEALTH), {
+        headers: { Accept: 'application/json' },
+        signal: AbortSignal.timeout ? AbortSignal.timeout(CONFIG.PROBE_MS) : undefined
+      });
+      const ct = r.headers.get('content-type') || '';
+      return { ok: r.ok && !/text\/html/i.test(ct), status: r.status };
+    } catch (e) { return { ok: false, reason: String(e && e.message || 'network') }; }
+  },
+
+  /* ── TAB 1 · upload a document, receive it pseudonymised ────────────────
+     @param {File} file
+     @returns {Promise<{ok:boolean, source:'live'|'mock',
+       document:{name,size,type,sha256}, original_text:string, pseudonymized_text:string,
+       keys:Array<{token,category,value,occurrences}>,
+       stats:{entities,unique,categories,chars,reduction,duration_ms},
+       run_id:string, created_at:string}>} */
+  async uploadAndPseudonymize(file) {
+    if (AppState.mode !== 'live') return Mock.pseudorun(file);
+    const form = new FormData();
+    form.append('file', file, file.name);          // FastAPI: async def pseudorun(file: UploadFile = File(...))
+    const res = await fetch(url('/pseudorun'), { method: 'POST', body: form });
+    if (!res.ok) throw new Error('/pseudorun → HTTP ' + res.status);
+    const j = await res.json();
+    const keys = (j.keys || j.mapping || j.entities || []).map(normaliseKey);
+    const original = j.original_text || j.source_text || '';
+    const scrubbed = j.pseudonymized_text || j.redacted_text || '';
+    return {
+      ok: true, source: 'live',
+      document: {
+        name: (j.document && j.document.name) || j.filename || (file && file.name) || 'document',
+        size: (j.document && j.document.size) ?? (file && file.size) ?? original.length,
+        type: (j.document && j.document.type) || (file && file.type) || 'application/octet-stream',
+        sha256: (j.document && j.document.sha256) || j.sha256 || fakeHash(original || scrubbed)
+      },
+      original_text: original, pseudonymized_text: scrubbed, keys,
+      run_id: j.run_id || uid('run'), created_at: j.created_at || new Date().toISOString(),
+      stats: j.stats || Redactor.stats(original, scrubbed, keys, 0)
+    };
+  },
+
+  /* ── TAB 2 · resolve privacy tokens back to real identities ─────────────
+     @param {string} text          text containing tokens
+     @param {File|null} csvFile    optional keys.csv; omit to use vault keys
+     @param {string|null} bundleId optional bundle id (e.g. 1-keys.csv or 'vault') */
+  async depseudonymize(text, csvFile, bundleId) {
+    if (AppState.mode !== 'live') return Mock.depseudorun(text, csvFile);
+    let res;
+    if (csvFile) {                                        // multipart variant
+      const form = new FormData();
+      form.append('text', text);
+      form.append('keys_file', csvFile, csvFile.name);
+      if (bundleId) form.append('bundle_id', bundleId);
+      res = await fetch(url('/depseudorun'), { method: 'POST', body: form });
+    } else {                                              // json variant, server holds the keys
+      res = await fetch(url('/depseudorun'), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, session_ids: AppState.selectedSessions, bundle_id: bundleId })
+      });
+    }
+    if (!res.ok) throw new Error('/depseudorun → HTTP ' + res.status);
+    const j = await res.json();
+    return {
+      ok: true, source: 'live',
+      restored_text: j.restored_html || highlightRestored(j.restored_text || j.depseudonymized_text || '', j.resolved || []),
+      plain: j.restored_text || j.depseudonymized_text || '',
+      resolved: (j.resolved || j.mapping || []).map(normaliseKey),
+      unresolved: j.unresolved || j.unknown_tokens || [],
+      source_label: j.source_label || 'FastAPI · /depseudorun'
+    };
+  },
+
+  async fetchBundles() {
+    if (AppState.mode !== 'live') return [{ id: 'vault', name: 'Active Vault Session (All Stored Keys)', keys_count: AppState.keys.length }];
+    try {
+      const res = await fetch(url('/api/bundles'), { headers: { Accept: 'application/json' } });
+      if (!res.ok) return [];
+      const j = await res.json();
+      return j.bundles || [];
+    } catch (_) { return []; }
+  },
+
+  /* ── TAB 3 · chat over the redacted context ──────────────────────────── */
+  async chatWithDocument({ message, context, apiKey, model, autoRestore, temperature, maxTokens, system, history, signal }) {
+    const payload = {
+      message, context, model, temperature, max_tokens: maxTokens, system,
+      history: (history || []).slice(-8).map((m) => ({ role: m.role, content: m.raw || m.text })),
+      auto_restore: !!autoRestore
+    };
+    if (apiKey) payload.api_key = apiKey;
+
+    /* 3a · direct Groq mode */
+    if (AppState.prefs.direct && apiKey) return apiService._groq(payload, apiKey, signal);
+
+    /* 3b · Live FastAPI call */
+    try {
+      const res = await fetch(url('/api/chat'), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload), signal
+      });
+      if (res.ok) {
+        const ct = res.headers.get('content-type') || '';
+        if (ct.includes('event-stream')) return { ok: true, source: 'live', reply: await readSSE(res.body) };
+        const j = await res.json();
+        return { ok: true, source: 'live', reply: j.reply || j.content || j.message || '', model_used: j.model_used, usage: j.usage };
+      }
+      const errText = await res.text();
+      let errMsg = 'HTTP ' + res.status;
+      try { const ej = JSON.parse(errText); errMsg = ej.detail || errMsg; } catch (_) { errMsg = errText.slice(0, 200) || errMsg; }
+      throw new Error(errMsg);
+    } catch (err) {
+      if (signal?.aborted) throw err;
+      if (apiKey) {
+        console.warn('Backend /api/chat unreachable, falling back to direct Groq:', err.message);
+        return apiService._groq(payload, apiKey, signal);
+      }
+      throw err;
+    }
+  },
+
+  async _groq(payload, apiKey, signal) {
+    let currentModel = payload.model || 'openai/gpt-oss-120b';
+    const makeReq = (mod) => fetch(CONFIG.GROQ_URL, {
+      method: 'POST', signal,
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + apiKey },
+      body: JSON.stringify({
+        model: mod, temperature: payload.temperature, max_tokens: payload.max_tokens, stream: true,
+        messages: [
+          { role: 'system', content: payload.system + (payload.context ? '\n\nREDACTED DOCUMENT CONTEXT (tokens are intentional):\n' + payload.context : '') },
+          ...payload.history, { role: 'user', content: payload.message }
+        ]
+      })
+    });
+    let res = await makeReq(currentModel);
+    if ((res.status === 404 || res.status === 400) && currentModel !== 'openai/gpt-oss-120b') {
+      currentModel = 'openai/gpt-oss-120b';
+      res = await makeReq(currentModel);
+    }
+    if ((res.status === 404 || res.status === 400) && currentModel !== 'openai/gpt-oss-20b') {
+      currentModel = 'openai/gpt-oss-20b';
+      res = await makeReq(currentModel);
+    }
+    if ((res.status === 404 || res.status === 400) && currentModel !== 'qwen/qwen3.8-27b') {
+      currentModel = 'qwen/qwen3.8-27b';
+      res = await makeReq(currentModel);
+    }
+    if (!res.ok) throw new Error('Groq → HTTP ' + res.status + ' ' + (await res.text()).slice(0, 140));
+    return { ok: true, source: 'groq', reply: await readSSE(res.body), model: currentModel };
+  },
+
+  /* ── vault list ──────────────────────────────────────────────────────── */
+  async fetchRecentSessions() {
+    if (AppState.mode !== 'live') return Mock.sessions();
+    const res = await fetch(url('/api/sessions'), { headers: { Accept: 'application/json' } });
+    if (!res.ok) throw new Error('/api/sessions → HTTP ' + res.status);
+    const j = await res.json();
+    const list = Array.isArray(j) ? j : (j.sessions || []);
+    return list.map((s) => ({
+      id: s.id || s.session_id || uid('ses'), document: s.document || s.filename || 'document',
+      created_at: s.created_at || s.timestamp || new Date().toISOString(),
+      entities: s.entities ?? (s.keys || []).length, keys: (s.keys || s.mapping || []).map(normaliseKey)
+    }));
+  }
+};
+const normaliseKey = (k) => ({
+  token: (k.token || k.placeholder || '').trim(),
+  category: String(k.category || k.type || 'ID').toUpperCase(),
+  value: k.value ?? k.original ?? k.real ?? '',
+  occurrences: k.occurrences ?? k.count ?? 1
+});
+
+/* OpenAI-style SSE reader; feeds the live bubble as tokens arrive. */
+async function readSSE(body) {
+  const reader = body.getReader(), dec = new TextDecoder();
+  let buf = '', out = '';
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    const lines = buf.split('\n'); buf = lines.pop() || '';
+    for (const line of lines) {
+      const t = line.trim(); if (!t.startsWith('data:')) continue;
+      const d = t.slice(5).trim(); if (!d || d === '[DONE]') continue;
+      try { out += JSON.parse(d).choices?.[0]?.delta?.content || ''; } catch (_) { out += d; }
+    }
+    if (window.Chat) Chat._onStream(out);
+  }
+  return out;
+}
+
+/* ══ 3 · Redactor — deterministic, reversible pseudonymisation ════════════ */
+const CATS = {
+  PERSON      : { label: 'Person',       icon: 'user-round',      color: '#7dd3fc' },
+  ORGANIZATION: { label: 'Organisation', icon: 'building-2',      color: '#a5b4fc' },
+  MONEY       : { label: 'Money',        icon: 'banknote',        color: '#fcd34d' },
+  EMAIL       : { label: 'Email',        icon: 'at-sign',         color: '#6ee7b7' },
+  PHONE       : { label: 'Phone',        icon: 'phone',           color: '#fda4af' },
+  DATE        : { label: 'Date',         icon: 'calendar-days',   color: '#bef264' },
+  ADDRESS     : { label: 'Place',        icon: 'map-pin',         color: '#93c5fd' },
+  LOCATION    : { label: 'Place',        icon: 'map-pin',         color: '#93c5fd' },
+  REFERENCE   : { label: 'Reference',    icon: 'hash',            color: '#d4d4d8' },
+  URL         : { label: 'Link',         icon: 'link',            color: '#fdba74' },
+  ID          : { label: 'Identifier',   icon: 'hash',            color: '#d4d4d8' }
+};
+const FIRST = ['Elena','Marcus','Priya','Anjalai','Sofia','Daniel','Yuki','Amara','Hugo','Lena','Nadia','Thomas','Aisha','Rafael','Ingrid','Omar','Clara','Viktor','Mei','Jonas','Fatima','Alexander','Sophie','Julian','Nora','Karim','Beatriz','Stefan','Astrid','Ravi','Camille','Lukas','Ilse','Tariq','Greta','Emil','Rosa','Andrei','Marta','Kian','Isabella','Terrence'];
+const ORGS  = ['Northgate','Meridian','Halcyon','Vantar','Blackwood','Ashcombe','Lattice','Orpheus','Kestrel','Aurelia','Sable','Ironwood','Quill','Verdant','Cobalt','Pallas'];
+const PLACES= ['Zurich','Geneva','Munich','Frankfurt am Main','Amsterdam','Rotterdam','Boston','Singapore','Toronto','Barcelona','Milan','Vienna','Copenhagen','Hamburg','Paris'];
+
+const PATTERNS = [
+  { cat:'EMAIL', re:/[A-Za-z0-9._%+\-]+@[A-Za-z0-9\-]+(?:\.[A-Za-z0-9\-]+){1,}/g },
+  { cat:'URL',   re:/(?:https?|ftp):\/\/[^\s<>"'\]\)]+/g },
+  { cat:'ID',    re:/\b(?:\d{1,3}\.){3}\d{1,3}\b|\b(?:[A-F0-9]{2}:){5}[A-F0-9]{2}\b/gi, min:7 },
+  { cat:'ID',    re:/\b(?:VAT|GST|Tax\s?ID|EIN|HRB|SIRET|SIREN|CRN|Company\sNo|Reg(?:istration)?\sNo|Matter\sNo|PO|Invoice\sNo|Contract\sNo|Case\sNo|Account\sNo|Passport\sno\.?|Agreement\sNo|Policy)\.?\s?[:#]?\s*(?=[A-Z0-9][A-Z0-9\-\/\.]{2,23}\d)[A-Z0-9][A-Z0-9\-\/\.]{3,24}\b/gi, min:6 },
+  { cat:'ID',    re:/\b[A-Z]{2}\s?\d{7,9}\b|\b\d{3}-\d{2}-\d{4}\b/g },
+  { cat:'ADDRESS', re:/\b[A-Z]{2}\d{2}(?:\s?[A-Z0-9]{4}){3,7}\b/g },                  // IBAN
+  { cat:'ID',    re:/\b(?:\d[ \-]?){13,16}\b/g, digits:[13, 16] },                     // card numbers
+  { cat:'PHONE', re:/(?:\+\d{1,3}[ .\-]?)?(?:\(\d{1,5}\)[ .\-]?)?\d{2,5}[ .\-]?\d{3,4}[ .\-]?\d{3,4}(?:\s?x\d{1,5})?\b/g, digits:[7, 15] },
+  { cat:'MONEY', re:/(?:€|\$|£|¥|CHF|EUR|USD|GBP|JPY|AUD|CAD|SEK|NOK|CNY)\s?\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{1,3})?|\d{1,3}(?:[.,]\d{3}){1,}(?:[.,]\d{1,3})?\s?(?:EUR|USD|GBP|JPY|CHF|AUD|CAD|SEK|NOK|CNY)/gi, min:2 },
+  { cat:'DATE',  re:/\b(?:\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4}|(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4}|(?:\d{1,2}(?:st|nd|rd|th)?\s+)?(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{4}|\d{4}-\d{2}-\d{2})\b/gi },
+  { cat:'ADDRESS', re:/\b\d{1,5}[A-Za-z]?\s+[A-Z][A-Za-z0-9.\-'’]+(?:\s+[A-Z][A-Za-z0-9.\-'’]+){0,3}\s+(?:Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Lane|Ln|Drive|Dr|Way|Square|Sq|Place|Pl|Terrace|Court|Ct|Parkway|Pkwy|Rue|Quai|Straße|Strasse|Weg|Allee|Gracht|Plein)\.?/g, min:6 },
+  { cat:'ADDRESS', re:/\b\d{4}\s+[A-Z][a-z]+(?:[ ,]\w+)?\b(?=,|\n|\s+(?:Switzerland|Netherlands|Germany|France|USA|United States|Suisse)\b)/g, min:5 },
+  { cat:'ADDRESS', re:new RegExp('\\b(?:' + PLACES.join('|') + ')\\b', 'g') },
+  { cat:'PERSON', re:/\b(?:Dr|Prof|Mr|Ms|Mrs|Sir|Madam|Judge|Attorney|Hon)\.?\s+[A-Z][a-z’']{1,14}(?:\s+[A-Z][a-z’']{1,14}){1,2}\b/g, min:4 },
+  { cat:'PERSON', re:/\b[A-Z][A-Z’'\-]{2,14},\s+[A-Z][a-z’']{1,14}\b/g, min:4 },
+  { cat:'PERSON', re:new RegExp('\\b(?:' + FIRST.join('|') + ')(?:\\s+(?:[A-Z][a-z’\\-]{1,16}|[A-Z]\\.?)){1,2}\\b', 'g'), min:4 },
+  { cat:'PERSON', re:/\b[A-Z][a-z’']{1,14}\s+[A-Z][a-z’']{1,14}(?=,?\s+(?:Chief|Head of|Director|Managing|Senior|VP|President|General Counsel|Partner|Counsel|Founder|Analyst|Minister|Auditor))/g, min:4 },
+  { cat:'PERSON', re:/\bName:\s*([A-Z][a-z’']+\s+[A-Z][a-z’']+)/g, group:1, min:4 },
+  { cat:'ORGANIZATION', re:/\b(?:[A-Z][A-Za-z0-9&.'’\-]+\s){0,4}[A-Z][A-Za-z0-9&.'’\-]*\s+(?:Inc|Incorporated|LLC|Ltd|Limited|GmbH|AG|SE|SA|NV|KG|Corp|Corporation|Company|Co|Group|Holdings|Partners|Capital|Bank|Trust|Fund|Technologies|Technology|Systems|Solutions|Labs|Industries|Enterprises|LLP|PLC)\b\.?/g, min:4 },
+  { cat:'ORGANIZATION', re:new RegExp('\\b(?:' + ORGS.join('|') + ')(?:\\s+(?:[A-Z][A-Za-z0-9&\\-]+\\s+)){0,2}(?:Bank|Holdings|Group|Capital|Labs|Technologies|Technologies Inc\\.|Systems|Industries|Trust|Partners|Mutual)?\\b', 'g'), min:4 },
+  { cat:'ORGANIZATION', re:/\b(?:Ministry|Agency|Authority|Council|Foundation|Institute|University|Hospital|Chamber|Committee|Commission|Board|Tribunal)\s+(?:of|for|de|des|der)\s+[A-ZÀ-Þ][A-Za-zÀ-ÿ'’\- ]{3,32}/g, min:8 },
+  { cat:'ORGANIZATION', re:/\b(?:[A-Z][A-Z&\-]{2,11})\s+(?:N\.?\s?V\.?|S\.?\s?A\.?|B\.?\s?V\.?|A\.?\s?S\.?)\b/g, min:4 }
+];
+
+const Redactor = {
+  run(text) {
+    text = String(text || '');
+    const t0 = performance.now();
+    const taken = new Uint8Array(text.length);
+    const found = [];
+    for (const p of PATTERNS) this._scan(text, p, taken, found);
+    found.sort((a, b) => a.start - b.start || b.end - a.end);
+
+    const counters = Object.create(null), byValue = new Map(), keys = [], index = new Map();
+    const parts = [], spans = []; let cursor = 0;
+    for (const f of found) {
+      const norm = f.cat + '::' + f.value.trim().replace(/\s+/g, ' ').toLowerCase();
+      let token = byValue.get(norm);
+      if (!token) {
+        counters[f.cat] = (counters[f.cat] || 0) + 1;
+        token = f.cat + '_' + String(counters[f.cat]).padStart(3, '0');
+        byValue.set(norm, token);
+        keys.push({ token, category: f.cat, value: f.value.trim(), occurrences: 0 });
+        index.set(token, keys[keys.length - 1]);
+      }
+      index.get(token).occurrences++;
+      parts.push(text.slice(cursor, f.start), token);
+      spans.push({ start: f.start, end: f.end, token, cat: f.cat, value: text.slice(f.start, f.end) });
+      cursor = f.end;
+    }
+    parts.push(text.slice(cursor));
+    const pseudonymized_text = parts.join('');
+    const duration = Math.max(1, Math.round(performance.now() - t0));
+    return { keys, spans, found, duration, pseudonymized_text, original: text,
+             stats: this.stats(text, pseudonymized_text, keys, duration) };
+  },
+
+  _scan(text, p, taken, out) {
+    p.re.lastIndex = 0; let m, guard = 0;
+    while ((m = p.re.exec(text)) !== null && guard++ < 5000) {
+      if (m[0] === '') { p.re.lastIndex++; continue; }
+      let s = m.index, e = m.index + m[0].length;
+      if (p.group && m[p.group] !== undefined) {                       // capture-group patterns
+        const idx = m.index + m[0].indexOf(m[p.group]);
+        s = idx; e = idx + m[p.group].length;
+      }
+      while (e > s && /[\s.,;:!?)\]'"’”\-]/.test(text[e - 1])) e--;
+      while (s < e && /[\s(“"]/.test(text[s])) s++;
+      const v = text.slice(s, e);
+      if (!v || v.length < (p.min || 2)) continue;
+      if (p.digits) { const d = v.replace(/\D/g, '').length; if (d < p.digits[0] || d > p.digits[1]) continue; }
+      if (/^\d+$/.test(v) && v.length < 5) continue;
+      if (p.cat === 'PHONE' && /^\d{1,3}[.\-]\d{1,3}[.\-]\d{1,3}$/.test(v)) continue;   // version/id triples
+      let clash = false; for (let i = s; i < e; i++) if (taken[i]) { clash = true; break; }
+      if (clash) continue;
+      for (let i = s; i < e; i++) taken[i] = 1;
+      out.push({ start: s, end: e, value: v, cat: p.cat });
+    }
+  },
+
+  stats(original, scrubbed, keys, duration) {
+    const chars = (original || '').length;
+    return {
+      entities: keys.reduce((a, k) => a + k.occurrences, 0), unique: keys.length,
+      categories: new Set(keys.map((k) => k.category)).size, chars,
+      reduction: chars ? Math.max(0, Math.round((1 - (scrubbed || '').length / chars) * 1000) / 10) : 0,
+      duration_ms: duration || 0
+    };
+  }
+};
+
+/* Live-mode fallback highlighter when the API returns plain text only. */
+function highlightRestored(text, resolved) {
+  const map = new Map((resolved || []).map((k) => [k.token, k]));
+  return esc(text).replace(tokenRe(), (t) => map.has(t)
+    ? '<mark class="restored" data-tok="' + t + '" data-c="' + map.get(t).category + '">' + esc(map.get(t).value) + '</mark>'
+    : '<span class="tok tok-unresolved" data-tok="' + t + '">' + t + '</span>');
+}
+
+/* ══ 4 · Mock fixtures (instant preview, zero setup) ══════════════════════ */
+const SAMPLE_DOC = `MASTER DATA PROCESSING AND PROFESSIONAL SERVICES AGREEMENT
+
+Agreement No. MDA-2024-0417 — executed this 14th day of March, 2024 (the "Effective Date").
+
+BETWEEN:
+(1) NORTHGATE HOLDINGS AG, a corporation organised under the laws of Switzerland, whose principal
+    place of business is Feldstrasse 42, 8001 Zurich, Switzerland ("Client"); and
+(2) MERIDIAN LATTICE TECHNOLOGIES INC., a Delaware corporation, whose principal place of business
+    is 88 Harbor Boulevard, Boston, MA 02110, United States ("Provider").
+
+RECITALS
+Dr. Elena Vasquez, Chief Privacy Officer of Northgate Holdings AG, and Marcus Whitfield, General
+Counsel of Meridian Lattice Technologies Inc., confirm that the parties intend to process personal
+data on the terms below. Client's tax identifier is CHE-114.902.331 and Provider's VAT number is
+US 84-2910773.
+
+1. SCOPE OF SERVICES
+1.1 Provider shall deliver the Platform Migration Programme described in Exhibit A between
+    01/04/2024 and 30/09/2024, staffed by no fewer than eleven (11) senior engineers.
+1.2 Client shall provide access to the internal repository at https://git.northgate-internal.example/
+    core-banking and to the staging host 10.42.17.88.
+1.3 Any sub-processor listed in Exhibit C requires prior written approval from Priya Raghunathan,
+    Head of Vendor Risk (priya.raghunathan@northgate.example, +41 44 912 8830).
+
+2. FEES AND PAYMENT
+2.1 Client shall pay Provider a fixed fee of EUR 2,450,000.00, invoiced quarterly in arrears.
+2.2 A success bonus of $1,250,000 is payable if cutover completes before 30 September 2024.
+2.3 Late amounts accrue interest at 1.5% per month. Travel is reimbursed up to GBP 18,500.
+2.4 Invoices are payable within thirty (30) days to IBAN CH93 0076 2011 6238 5295 7,
+    BIC UBSWCHZH80A, reference MDA-2024-0417.
+
+3. CONFIDENTIALITY AND DATA PROTECTION
+3.1 Each party shall treat the other's Confidential Information as strictly confidential.
+3.2 Provider shall notify Client of any Personal Data Breach without undue delay and in any event
+    within 24 hours, to privacy@meridian-lattice.example or to +1 (617) 555-0142.
+3.3 Client personnel listed in Schedule 4 — including Daniel Okonkwo, Sofia Lindqvist and
+    Hugo Beaumont — are authorised to receive Personal Data.
+3.4 Audit reports are held at 14 Rue de la Paix, 75002 Paris and at the Rotterdam archive.
+
+4. LIABILITY AND INDEMNITY
+4.1 Aggregate liability is capped at EUR 4,900,000 during any twelve-month period.
+4.2 Provider shall indemnify Client for third-party claims arising from a Data Incident, capped at
+    USD 7,500,000. Nothing excludes liability for fraud or wilful misconduct.
+4.3 Client's insurer is Ashcombe Mutual PLC, policy AM-77-2211-04, with a deductible of £250,000.
+
+5. TERM AND TERMINATION
+5.1 The Initial Term runs for thirty-six (36) months from the Effective Date.
+5.2 Either party may terminate for convenience on 90 days' written notice to legal@meridian-lattice.example.
+
+IN WITNESS WHEREOF the parties have executed this Agreement as of the Effective Date.
+
+SIGNED for and on behalf of NORTHGATE HOLDINGS AG
+Name: Dr. Elena Vasquez            Title: Chief Privacy Officer
+Date: 14.03.2024                   Passport no. ZH 4419287
+
+SIGNED for and on behalf of MERIDIAN LATTICE TECHNOLOGIES INC.
+Name: Marcus Whitfield             Title: General Counsel
+Date: 14/03/2024                   Contact: m.whitfield@meridian-lattice.example`;
+
+
+const Mock = {
+  async pseudorun(file) {
+    const text = await Mock.extract(file);
+    await sleep(140);
+    const r = Redactor.run(text);
+    return {
+      ok: true, source: 'mock',
+      document: file
+        ? { name: file.name, size: file.size, type: file.type || 'application/octet-stream', sha256: fakeHash(text) }
+        : { name: 'sample-contract.pdf', size: text.length, type: 'application/pdf', sha256: fakeHash(text) },
+      original_text: text, pseudonymized_text: r.pseudonymized_text,
+      keys: r.keys, stats: r.stats, run_id: uid('run'), created_at: new Date().toISOString()
+    };
+  },
+
+  /* Real builds hand the raw bytes to FastAPI (OCR + layout parsing there).
+     Sandbox mode reads plain-text files for real and simulates extraction
+     for binary types so every code path stays testable offline.              */
+  async extract(file) {
+    if (!file) return SAMPLE_DOC;
+    if (/^text\//.test(file.type) || /\.(txt|md|csv|json|eml)$/i.test(file.name)) {
+      try { const t = await file.text(); if (t.trim().length > 40) return t; } catch (_) {}
+      return SAMPLE_DOC;
+    }
+    return SAMPLE_DOC.replace('Agreement No. MDA-2024-0417',
+      'Agreement No. MDA-2024-0417   [extracted from ' + file.name + ' · OCR confidence 98.4%]');
+  },
+
+  async depseudorun(text, csvFile) {
+    await sleep(180);
+    let keys = [], label = 'Session vault keys';
+    if (csvFile) { keys = Mock.parseCsv(await csvFile.text()); label = 'Uploaded ' + (csvFile.name || 'keys.csv'); }
+    else if (AppState.keySource === 'csv' && AppState.csvKeys && AppState.csvKeys.length) { keys = AppState.csvKeys; label = 'Loaded keys.csv'; }
+    else { keys = Restore.keys(); label = AppState.selectedSessions.length ? AppState.selectedSessions.length + ' vault sessions' : 'Entire session vault'; }
+    const out = RedactorRestore(text, keys, label);
+    out.source = 'mock';
+    return out;
+  },
+
+  /* VaultDoc CSV layout: token,category,value,occurrences,document */
+  parseCsv(src) {
+    const rows = String(src).replace(/\r/g, '').split('\n').filter((r) => r.trim());
+    const out = [];
+    for (let i = (/^\s*token\s*,/i.test(rows[0] || '') ? 1 : 0); i < rows.length; i++) {
+      const cells = []; let cur = '', q = false;
+      for (let c = 0; c < rows[i].length; c++) {
+        const ch = rows[i][c];
+        if (ch === '"') { if (q && rows[i][c + 1] === '"') { cur += '"'; c++; } else q = !q; }
+        else if (ch === ',' && !q) { cells.push(cur); cur = ''; }
+        else cur += ch;
+      }
+      cells.push(cur);
+      const rec = normaliseKey({ token: (cells[0] || '').trim(), category: (cells[1] || 'ID').trim(),
+        value: (cells[2] || '').trim(), occurrences: parseInt(cells[3], 10) || 1 });
+      if (TOKEN_ONLY.test(rec.token) && rec.value) out.push(rec);
+    }
+    return out;
+  },
+
+  chatReply(payload) {
+    const keys = (AppState.chat.ctx && AppState.chat.ctx.keys.length ? AppState.chat.ctx.keys : AppState.keys) || [];
+    const g = (cat, i = 0) => keys.filter((k) => k.category === cat)[i]?.token || (cat + '_001');
+    const org = g('ORGANIZATION'), org2 = g('ORGANIZATION', 1), per = g('PERSON'), per2 = g('PERSON', 1);
+    const money = g('MONEY'), date = g('DATE'), id = g('ID'), mail = g('EMAIL'), ph = g('PHONE');
+    const q = (payload.message || '').toLowerCase();
+    if (!keys.length)
+      return 'No document is attached to this session, so I have nothing grounded to reason over.\n\n• Redact a file in tab **01 · Redact** and press *Send to confidential chat*, or load a key bundle from the vault.\n• I only ever see tokenised text — that is by design.';
+    if (/summar|overview|tl;?dr|brief/.test(q))
+      return '**Summary of the redacted brief**\n\n1. Parties — ' + org + ' engages ' + (org2 || org) + ' under agreement ' + id + ', with an initial term of thirty-six (36) months measured from ' + date + '.\n2. Money — fixed consideration ' + money + ', a time-boxed success bonus, and interest of 1.5% per month on late amounts.\n3. People — ' + per + ' executes for the client; ' + per2 + ' executes for the provider and is the notice contact for incident escalation.\n4. Open items — sub-processor approval, the breach-notice channel, and the audit-archive location should be confirmed before cutover.';
+    if (/risk|red flag|concern|issue|problem/.test(q))
+      return '**Risk read**\n\n• Indemnity exposure (§4.2) is capped in absolute terms, while the bonus in §2.2 is time-bound — that asymmetry favours ' + (org2 || org) + '.\n• Notice obligations run to a named individual via ' + mail + ' / ' + ph + ' rather than a role mailbox: a single-person dependency if they leave.\n• §1.2 grants repository and staging-host access that sits outside the confidentiality framing of §3.1.\n\nRecommended: re-point notices to a functional address, and mirror the bonus conditions into the liability cap.';
+    if (/date|deadline|when|term|timeline|schedule/.test(q))
+      return '**Timeline pulled from the document**\n\n• Effective date: ' + date + '\n• Delivery window and cutover milestone: §1.1, measured against the bonus trigger in §2.2.\n• Termination for convenience: ninety (90) days written notice (§5.2), served on the notice address tied to ' + per2 + '.\n• Personal data breach notification: without undue delay, never later than 24 hours (§3.2).';
+    if (/amount|fee|cost|pay|money|price|invoice|cap|liabilit/.test(q))
+      return '**Monetary terms**\n\n• Fixed fee: ' + money + ' (§2.1), invoiced quarterly in arrears.\n• Performance bonus: a second amount, contingent on early cutover (§2.2); travel reimbursed to a separate ceiling (§2.3).\n• Liability ceilings: §4.1 general, §4.2 data incidents, with the deductible borne by ' + org + '.\n• Settlement reference ' + id + ' via the account in §2.4.\n\nBecause values keep their shape, you can still do arithmetic with your model — only the identity is removed.';
+    if (/who|people|party|parties|counterpart|sign|contact/.test(q))
+      return '**Counterparties and signatories**\n\n• ' + org + ' — client; signed by ' + per + ', Chief Privacy Officer, on ' + date + '.\n• ' + (org2 || 'ORGANIZATION_002') + ' — provider; signed by ' + (per2 || 'PERSON_002') + ', General Counsel.\n• Sub-processor approvals escalate to the Head of Vendor Risk named in §1.3 (' + mail + ').\n• Authorised recipients of personal data appear in Schedule 4 (§3.3).';
+    if (/quote|verbatim|clause|section/.test(q))
+      return 'Verbatim, tokens intact so you can restore it in tab 02:\n\n> §4.2 — ' + (org2 || org) + ' shall indemnify ' + org + ' for third-party claims arising from a Data Incident, capped at the figure recorded in §4.2 and subject to the deductible held by ' + id + '.\n\n§3.2 routes notification to ' + mail + ' or ' + ph + ' within 24 hours of ' + per + '’s awareness.';
+    return 'Working from the redacted brief attached to this session:\n\n• The clause you asked about is expressed entirely in privacy tokens — ' + per + ', ' + org + ' and ' + money + ' are resolvable from your vault, never by me.\n• Structurally the obligation runs from ' + (org2 || org) + ' to ' + per + ' inside the notice window of §3.2, subject to the cap in §4.2 and the milestone on ' + date + '.\n• Ask me to "quote §4.2 verbatim" and I will reproduce it with tokens intact for restoration in tab 02.\n\nRun reference: ' + id + '.';
+  },
+
+  sessions() {
+    const k = (token, category, value, occurrences) => ({ token, category, value, occurrences });
+    const mk = (document, at, keys) => ({ id: uid('ses'), document, created_at: at, entities: keys.reduce((a, x) => a + x.occurrences, 0), keys });
+    return [
+      mk('vendor-deposition-v3.pdf', isoAgo(2, 'h'), [
+        k('PERSON_001', 'PERSON', 'Isabella Kroon', 6), k('PERSON_002', 'PERSON', 'Terrence Abe', 3),
+        k('ORGANIZATION_001', 'ORGANIZATION', 'Vantar Capital LLP', 5), k('MONEY_001', 'MONEY', '€1,100,000', 2),
+        k('EMAIL_001', 'EMAIL', 'i.kroon@vantar.example', 1), k('DATE_001', 'DATE', '22 Nov 2023', 2)]),
+      mk('q3-invoice-batch.pdf', isoAgo(1, 'd'), [
+        k('ORGANIZATION_001', 'ORGANIZATION', 'Halcyon Systems GmbH', 9), k('MONEY_001', 'MONEY', 'USD 486,000', 4),
+        k('ID_001', 'ID', 'DE89 3704 0044 0532 0130 00', 1), k('DATE_001', 'DATE', '2024-01-15', 3)]),
+      mk('board-minutes-2024-02.docx', isoAgo(4, 'd'), [
+        k('PERSON_001', 'PERSON', 'Amara Nwosu', 11), k('PERSON_002', 'PERSON', 'Stefan Devereux', 7),
+        k('ORGANIZATION_001', 'ORGANIZATION', 'Blackwood Partners', 4), k('ADDRESS_001', 'ADDRESS', '12 Quay Lane', 2)])
+    ];
+  }
+};
+
+function RedactorRestore(text, keys, label) {
+  const map = new Map(); (keys || []).forEach((k) => { if (k && k.token) map.set(k.token, k); });
+  const resolved = []; const unresolved = new Set(); const html = [];
+  let last = 0, m; const re = tokenRe();
+  while ((m = re.exec(text)) !== null) {
+    const tok = m[0];
+    html.push(esc(text.slice(last, m.index)));
+    if (map.has(tok)) {
+      const rec = map.get(tok);
+      resolved.push({ token: tok, value: rec.value, category: rec.category || 'ID', occurrences: rec.occurrences });
+      html.push('<mark class="restored" data-tok="' + tok + '" data-c="' + (rec.category || 'ID') + '" title="' + esc(tok) + ' → restored locally">' + esc(rec.value) + '</mark>');
+    } else {
+      unresolved.add(tok);
+      html.push('<span class="tok tok-unresolved" data-tok="' + tok + '" title="No key loaded for this token">' + esc(tok) + '</span>');
+    }
+    last = m.index + tok.length;
+  }
+  html.push(esc(text.slice(last)));
+  return {
+    ok: true, source: 'mock', source_label: label || 'vault',
+    restored_text: html.join(''), resolved, unresolved: [...unresolved],
+    plain: text.replace(tokenRe(), (t) => (map.has(t) ? map.get(t).value : t))
+  };
+}
+
+/* ══ 5 · AppState — one reactive store shared by all three workspaces ══════ */
+const AppState = {
+  view: 'redact',
+  mode: 'live',
+  document: null, original: '', scrubbed: '', keys: [], spans: [], stats: null, runId: null,
+  activeCat: null,
+  vault: [], selectedSessions: [],
+  keySource: 'vault', csvKeys: null, csvName: null, csvFile: null,
+  restore: { result: null, mode: 'split' },
+  chat: { ctx: null, history: [], busy: false, lastHits: 0 },
+  prefs: { groqKey: '', persist: false, direct: false, model: 'openai/gpt-oss-120b',
+           temp: 0.2, maxTok: 3072, autoRestore: false },
+  get active() { return { name: this.document && this.document.name, keys: this.keys }; }
+};
+/* ══ 6 · utilities ═══════════════════════════════════════════════════════ */
+const $  = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const uid = (p) => p + '_' + Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-3);
+const fmtNum = (n) => (Number(n) || 0).toLocaleString('en-US');
+const fmtBytes = (b) => b < 1024 ? b + ' B' : b < 1048576 ? (b / 1024).toFixed(1) + ' KB' : (b / 1048576).toFixed(2) + ' MB';
+function chatBadge(v) { const s = $('#railChat [data-badge]'); if (s) s.textContent = v || ''; }
+const isoAgo = (v, u) => new Date(Date.now() - v * (u === 'h' ? 36e5 : 864e5)).toISOString();
+function timeAgo(iso) {
+  const d = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (d < 60) return 'just now';
+  if (d < 3600) return Math.round(d / 60) + 'm ago';
+  if (d < 86400) return Math.round(d / 3600) + 'h ago';
+  return Math.round(d / 86400) + 'd ago';
+}
+function fakeHash(str) {
+  let h = 0x811c9dc5, out = '';
+  for (let round = 0; round < 8; round++) {
+    for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i) + round; h = Math.imul(h, 0x01000193) >>> 0; }
+    out += h.toString(16).padStart(8, '0');
+  }
+  return out + out.slice(0, 32);
+}
+const catOf = (token) => {
+  const t = String(token || '').toUpperCase();
+  if (t.startsWith('DATE') || t.startsWith('TIME')) return 'DATE';
+  if (t.startsWith('MONEY') || t.startsWith('CURRENCY') || t.startsWith('AMOUNT')) return 'MONEY';
+  if (t.startsWith('LOC') || t.startsWith('ADDR') || t.startsWith('PLACE') || t.startsWith('CITY')) return 'LOCATION';
+  if (t.startsWith('REF') || t.startsWith('ID') || t.startsWith('NUM') || t.startsWith('CODE')) return 'REFERENCE';
+  if (t.startsWith('ORG') || t.startsWith('COMPANY')) return 'ORGANIZATION';
+  if (t.startsWith('PER') || t.startsWith('NAME') || t.startsWith('USER')) return 'PERSON';
+  if (t.startsWith('EMAIL')) return 'EMAIL';
+  if (t.startsWith('PHONE')) return 'PHONE';
+  if (t.startsWith('URL') || t.startsWith('LINK')) return 'URL';
+  return (t.split('_')[0] || 'ID');
+};
+
+/* ── icons: real Lucide set + graceful offline shim ───────────────────────── */
+const FALLBACK_ICONS = {
+  'check': 'M20 6 9 17l-5-5', 'x': 'M18 6 6 6l12 12M6 6l12 12', 'copy': 'M9 9h11v11H9zM5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1',
+  'download': 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3', 'upload': 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12',
+  'send-horizontal': 'M22 2 11 13M22 2 15 22l-4-9-9-4 20-7z', 'shield': 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z',
+  'lock': 'M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4', 'eye': 'M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z',
+  'file-text': 'M14 2v6h6M8 13h8M8 17h8M8 9h2', 'sparkles': 'M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9z',
+  'wand-sparkles': 'M12 3l1.6 3.9L17.5 8.5l-3.9 1.6L12 14l-1.6-3.9L6.5 8.5l3.9-1.6z', 'key-round': 'M2 18a4 4 0 1 0 8 0 4 4 0 0 0-8 0zM10 18h12M18 18v-4',
+  'plus': 'M12 5v14M5 12h14', 'trash-2': 'M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15', 'search': 'M11 11m-7 0a7 7 0 1 0 14 0 7 7 0 1 0-14 0M20 20l-4-4',
+  'command': 'M18 3a3 3 0 0 1 3 3v12a3 3 0 1 1-3-3H6a3 3 0 1 1 3 3V6a3 3 0 1 1-3 3h12'
+};
+function icons(root = document) {
+  if (window.lucide && lucide.createIcons) { try { lucide.createIcons({ root }); } catch (_) { shim(root); } }
+  else shim(root);
+}
+function shim(root = document) {
+  $$('[data-lucide]', root).forEach((el) => {
+    if (el.dataset.done) return; el.dataset.done = '1';
+    const p = FALLBACK_ICONS[el.dataset.lucide] || FALLBACK_ICONS.shield;
+    const svg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="width:100%;height:100%"><path d="' + p + '"/></svg>';
+    const i = document.createElement('i'); i.setAttribute('data-lucide', el.dataset.lucide);
+    i.className = el.className; i.innerHTML = svg; el.replaceWith(i);
+  });
+}
+
+/* ── toasts / clipboard / files ───────────────────────────────────────────── */
+function toast(msg, opt = {}) {
+  const el = document.createElement('div');
+  el.className = 'toast';
+  const tone = opt.tone === 'warn' ? 'var(--warn)' : opt.tone === 'bad' ? 'var(--err)' : 'var(--ok-soft)';
+  el.innerHTML = '<span class="ic" style="background:color-mix(in srgb,' + tone + ' 16%,transparent);color:' + tone + '">' +
+    '<i data-lucide="' + (opt.icon || 'check') + '"></i></span><span class="flex-1">' + esc(msg) + '</span>' +
+    (opt.action ? '<button class="btn btn-sm" data-toast-act>' + esc(opt.action) + '</button>' : '');
+  $('#toasts').appendChild(el); icons(el);
+  if (opt.action && opt.onAction) el.querySelector('[data-toast-act]').addEventListener('click', () => { opt.onAction(); close(); });
+  const close = () => { el.classList.add('out'); setTimeout(() => el.remove(), 320); };
+  setTimeout(close, opt.ms || 2900);
+}
+async function copyText(text, label = 'Copied to clipboard') {
+  try { await navigator.clipboard.writeText(text); toast(label, { icon: 'clipboard-check' }); }
+  catch (_) {
+    const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); toast(label, { icon: 'clipboard-check' }); } catch (e) { toast('Clipboard blocked by the browser', { tone: 'bad' }); }
+    ta.remove();
+  }
+}
+function download(name, text, mime = 'text/plain;charset=utf-8') {
+  const blob = new Blob([text], { type: mime }); const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  toast(name + ' saved', { icon: 'file-down' });
+}
+const csvFor = (keys, doc) => 'token,category,value,occurrences,document\n' + keys.map((k) =>
+  [k.token, k.category, '"' + String(k.value).replace(/"/g, '""') + '"', k.occurrences ?? 1, doc || '']
+    .join(',')).join('\n') + '\n';
+
+/* ══ 7 · UI ═══════════════════════════════════════════════════════════════ */
+const UI = {
+  /* ── chrome ───────────────────────────────────────────────────────────── */
+  setView(v) {
+    AppState.view = v;
+    $$('.view').forEach((s) => s.classList.toggle('on', s.id === 'view-' + v));
+    $$('.side-item[data-view]').forEach((b) => b.classList.toggle('on', b.dataset.view === v));
+    $('#viewTitle').textContent = { redact: 'Redact', restore: 'Restore', chat: 'AI Chat' }[v];
+    if (v === 'chat') { Chat.render(); Chat.focus(); }
+    if (v === 'restore') { Restore.render(); Restore.loadBundles(); }
+    revealObserve();
+  },
+
+  setMode(mode, announce) {
+    AppState.mode = mode; CONFIG.MODE = mode === 'live' ? 'live' : 'mock';
+    const modeLabel = $('#modeLabel'), modeDot = $('#modeDot');
+    if (modeLabel) modeLabel.textContent = mode === 'live' ? 'Live · FastAPI' : 'Sandbox engine';
+    if (modeDot) modeDot.className = 'dot' + (mode === 'live' ? ' live' : ' off');
+    const fs = $('#footStatus'), fd = $('#footDot');
+    if (fs) fs.textContent = mode === 'live' ? 'FastAPI connected' : 'Sandbox engine';
+    if (fd) fd.className = 'dot' + (mode === 'live' ? ' live' : ' off');
+    if (announce) toast(mode === 'live' ? 'Live backend attached' : 'Running in sandbox', { icon: mode === 'live' ? 'server' : 'flask-conical' });
+  },
+
+  /* ── dropzone ─────────────────────────────────────────────────────────── */
+  initDrop() {
+    const dz = $('#dropzone'), input = $('#fileInput');
+    const pick = () => input.click();
+    $('#btnBrowse').addEventListener('click', (e) => { e.stopPropagation(); pick(); });
+    dz.addEventListener('click', (e) => { if (e.target.closest('button')) return; pick(); });
+    dz.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); } });
+    input.addEventListener('change', () => { if (input.files[0]) RedactFlow.run(input.files[0]); input.value = ''; });
+    const dragging = (e) => {
+      if (e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files')) return true;
+      return false;
+    };
+    ['dragenter', 'dragover'].forEach((ev) => document.addEventListener(ev, (e) => {
+      if (!dragging(e) || e.target.closest('#csvDrop')) return;
+      e.preventDefault();
+      if (AppState.view === 'redact') {
+        dz.classList.add('over');
+        if ($('#redactResult').classList.contains('hidden')) $('#redactEmpty').classList.remove('hidden');
+      }
+    }));
+    ['dragleave', 'dragend'].forEach((ev) => document.addEventListener(ev, () => dz.classList.remove('over')));
+    document.addEventListener('drop', (e) => {
+      if (e.target.closest('#csvDrop')) return;                      // keys.csv has its own handler
+      e.preventDefault(); dz.classList.remove('over');
+      const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]; if (!f) return;
+      if (AppState.view !== 'redact') { UI.setView('redact'); setTimeout(() => RedactFlow.run(f), 240); }
+      else RedactFlow.run(f);
+    });
+    const sample = () => RedactFlow.run(null, true);
+    $('#btnSample').addEventListener('click', (e) => { e.stopPropagation(); sample(); });
+    const bi = $('#btnSampleInline'); if (bi) bi.addEventListener('click', (e) => { e.stopPropagation(); sample(); });
+  },
+
+  /* ── overlays ─────────────────────────────────────────────────────────── */
+  openDrawer(id) { $('#' + id).classList.add('on'); $('#overlay').classList.add('on'); },
+  closeOverlays() {
+    ['vaultDrawer', 'chatDrawer', 'contextModal', 'connModal', 'cmdk'].forEach((id) => { const el = $('#' + id); if (el) el.classList.remove('on'); });
+    const overlay = $('#overlay'), paletteOverlay = $('#cmdkOverlay');
+    if (overlay) overlay.classList.remove('on');
+    if (paletteOverlay) paletteOverlay.classList.remove('on');
+  },
+
+  /* ── command palette ──────────────────────────────────────────────────── */
+  cmdk: {
+    open: false, sel: 0, items: [],
+    build() {
+      return [
+        { t: 'Go to · Redact documents', i: 'scan-line', k: '1', run: () => UI.setView('redact') },
+        { t: 'Go to · Restore identities', i: 'wand-sparkles', k: '2', run: () => UI.setView('restore') },
+        { t: 'Go to · Confidential AI chat', i: 'messages-square', k: '3', run: () => UI.setView('chat') },
+        { t: 'Upload a file now', i: 'upload', run: () => { UI.setView('redact'); $('#fileInput').click(); } },
+        { t: 'Redact the live sample contract', i: 'sparkles', run: () => RedactFlow.run(null, true) },
+        { t: 'Download keys.csv for this run', i: 'file-down', run: () => AppState.keys.length ? download('vaultdoc-keys-' + (AppState.runId || 'run') + '.csv', csvFor(AppState.keys, AppState.document?.name), 'text/csv') : toast('Nothing redacted yet', { tone: 'warn' }) },
+        { t: 'Copy scrubbed text', i: 'copy', run: () => AppState.scrubbed ? copyText(AppState.scrubbed, 'Scrubbed text copied') : toast('Nothing to copy yet', { tone: 'warn' }) },
+        { t: 'Send scrubbed text to chat', i: 'send-horizontal', run: () => RedactFlow.sendToChat() },
+        { t: 'Toggle magic auto-restoration', i: 'sparkles', run: () => Chat.toggleAuto() },
+        { t: 'Paste a sample AI answer to restore', i: 'clipboard-paste', run: () => Restore.sample() },
+        { t: 'Open key vault', i: 'key-round', run: () => UI.openDrawer('vaultDrawer') },
+        { t: 'Backend connection settings', i: 'plug-zap', run: () => { UI.setView('chat'); $('#chatAdvanced').open = true; $('#connectionDetails').classList.remove('hidden'); } },
+        { t: 'Reveal originals for 8 seconds', i: 'eye', run: () => RedactFlow.reveal() },
+        { t: 'Purge all keys from this browser', i: 'eraser', run: () => RedactFlow.purge() }
+      ];
+    },
+    show() {
+      this.open = true; this.sel = 0; this.items = this.build();
+      $('#cmdkOverlay').classList.add('on'); $('#cmdk').classList.add('on');
+      const inp = $('#cmdkInput'); inp.value = ''; this.list(''); setTimeout(() => inp.focus(), 40); icons($('#cmdk'));
+    },
+    list(q) {
+      const items = this.items.filter((i) => !q || i.t.toLowerCase().includes(q.toLowerCase()));
+      this.sel = Math.min(this.sel, Math.max(0, items.length - 1));
+      $('#cmdkList').innerHTML = items.length ? items.map((i, n) =>
+        '<div class="cmd-row' + (n === this.sel ? ' sel' : '') + '" data-n="' + n + '"><i data-lucide="' + i.i +
+        '" style="width:15px;height:15px;color:var(--muted)"></i><span class="flex-1 text-[12.5px]">' + esc(i.t) +
+        '</span>' + (i.k ? '<span class="kbd">' + i.k + '</span>' : '') + '</div>').join('')
+        : '<p class="p-3 text-[12px] text-[var(--dim)]">No command matches “' + esc(q) + '”.</p>';
+      this.filtered = items; icons($('#cmdkList'));
+    },
+    exec(n) { const it = (this.filtered || [])[n]; if (!it) return; UI.closeOverlays(); it.run(); }
+  }
+};
+
+/* ── scroll reveal observer ──────────────────────────────────────────────── */
+let RO;
+function revealObserve() {
+  RO = RO || new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { e.target.classList.add('in'); RO.unobserve(e.target); } }), { threshold: .12 });
+  $$('[data-reveal]:not(.in)').forEach((n) => RO.observe(n));
+}
+
+/* ── highlight painters ─────────────────────────────────────────────────── */
+function paintOriginal(text, spans) {
+  let out = '', cur = 0;
+  for (const s of spans) {
+    out += esc(text.slice(cur, s.start));
+    out += '<span class="red" data-c="' + s.cat + '" data-tok="' + s.token + '" title="' + esc(s.value) + '  →  ' + s.token + '">' + esc(text.slice(s.start, s.end)) + '</span>';
+    cur = s.end;
+  }
+  return out + esc(text.slice(cur));
+}
+function paintTokens(text, opts = {}) {
+  const re = new RegExp(CONFIG.TOKEN_RE.source, 'g');
+  let i = 0;
+  return esc(text).replace(re, (t) => {
+    const c = catOf(t);
+    const meta = CATS[c] || { icon: 'hash', label: c };
+    const dim = opts.only && opts.only !== c ? ' dim' : '';
+    const delay = Math.min(i++, 34) * 14;
+    const known = opts.values && opts.values.has(t) ? 'key in vault' : 'no key in scope';
+    return '<span class="tok tok-hit' + dim + '" data-c="' + c + '" data-tok="' + t + '" title="' + esc(meta.label) + ' · ' + t + ' · ' + known +
+      '" style="animation-delay:' + delay + 'ms"><i data-lucide="' + meta.icon + '"></i>' + t + '</span>';
+  });
+}
+
+/* ══ 8 · REDACT flow ══════════════════════════════════════════════════════ */
+const STEPS = [
+  { i: 'file-search', t: 'Parse & flatten', n: 'Layout-aware text extraction' },
+  { i: 'radar', t: 'Detect entities', n: '9 detector classes · regex + NER' },
+  { i: 'shuffle', t: 'Tokenise', n: 'Stable mapping, format preserving' },
+  { i: 'stamp', t: 'Seal audit trail', n: 'run id, hash, key bundle' }
+];
+const RedactFlow = {
+  async run(file, isSample) {
+    if (isSample) file = null;
+    const bytes = file ? file.size : SAMPLE_DOC.length;
+    if (bytes > CONFIG.MAX_MB * 1048576) return toast('File exceeds ' + CONFIG.MAX_MB + ' MB', { tone: 'bad', icon: 'alert-triangle' });
+
+    $('#redactEmpty').classList.add('hidden'); $('#redactWork').classList.add('active'); $('#redactResult').classList.add('hidden');
+    const busy = $('#redactBusy'); busy.classList.remove('hidden');
+    $('#busyName').textContent = file ? file.name : 'sample-contract.pdf';
+    $('#busySteps').innerHTML = STEPS.map((s, i) =>
+      '<div class="step" data-s="' + i + '"><span class="num">' + (i + 1) + '</span><i data-lucide="' + s.i +
+      '" style="width:14px;height:14px"></i><div class="min-w-0"><p class="text-[12px] font-semibold truncate">' + s.t +
+      '</p><p class="text-[10.5px] text-[var(--dim)] truncate">' + s.n + '</p></div></div>').join('');
+    const bar = $('#busyBar'); bar.classList.add('striped'); bar.style.width = '6%';
+    icons(busy);
+
+    const job = apiService.uploadAndPseudonymize(file);
+    let step = 0;
+    const walker = setInterval(() => {
+      step = Math.min(step + 1, STEPS.length);
+      $$('.step', busy).forEach((el, i) => { el.classList.toggle('done', i < step - 1); el.classList.toggle('active', i === step - 1); });
+      $('#busyPct').textContent = Math.min(97, step * 24 + 3) + '%';
+      $('#busyNote').textContent = step < STEPS.length ? STEPS[step]?.n || 'Working…' : 'Writing the key bundle…';
+      bar.style.width = Math.min(97, step * 24 + 3) + '%';
+    }, 430);
+
+    let res;
+    try { res = await job; }
+    catch (err) {
+      clearInterval(walker); busy.classList.add('hidden'); $('#redactEmpty').classList.remove('hidden');
+      toast('Backend error — falling back to sandbox: ' + err.message, { tone: 'bad', icon: 'unlink', ms: 4600 });
+      AppState.mode = 'mock'; UI.setMode('mock');
+      res = await Mock.pseudorun(file);
+    }
+    clearInterval(walker);
+    $$('.step', busy).forEach((el, i) => { el.classList.remove('active'); el.classList.add('done'); });
+    bar.style.width = '100%'; $('#busyPct').textContent = '100%';
+    await sleep(260);
+    busy.classList.add('hidden');
+    this.render(res);
+  },
+
+  render(res) {
+    AppState.document = res.document; AppState.original = res.original_text || '';
+    AppState.scrubbed = res.pseudonymized_text || '';
+    let spans = [];
+    if (res.original_text && (!res.keys || !res.keys.length)) res.keys = [];
+    if (res.original_text) {
+      // recompute spans locally so the two panes stay perfectly aligned
+      const local = Redactor.run(res.original_text);
+      spans = local.spans;
+      if (!res.pseudonymized_text) { AppState.scrubbed = local.pseudonymized_text; res.keys = local.keys; res.stats = local.stats; }
+    }
+    AppState.keys = res.keys || []; AppState.spans = spans; AppState.stats = res.stats; AppState.runId = res.run_id;
+    AppState.activeCat = null;
+
+    $('#redactEmpty').classList.add('hidden'); $('#redactWork').classList.add('active');
+    const out = $('#redactResult'); out.classList.remove('hidden');
+    $('#docName').textContent = res.document.name;
+    $('#docSize').textContent = fmtBytes(res.document.size || 0);
+    const typeEl = $('#docType'), hashEl = $('#docHash'), runEl = $('#runId'), stampEl = $('#stampPill');
+    if (typeEl) typeEl.textContent = res.document.type || '';
+    if (hashEl) hashEl.textContent = (res.document.sha256 || fakeHash(AppState.scrubbed)).slice(0, 22);
+    if (runEl) runEl.textContent = res.run_id;
+    if (stampEl) stampEl.innerHTML = '<span class="dot"></span> Sealed';
+    this.paintPanes(); this.paintKeys();
+    const wrap = $('#paneOriginalWrap');
+    wrap.classList.add('masked'); wrap.classList.remove('revealed');
+    $('#lockVeil').classList.remove('hide');
+    $('#btnReveal').innerHTML = '<i data-lucide="eye"></i> Reveal briefly';
+
+    // shared state → vault → other tabs
+    const session = { id: res.run_id, document: res.document.name, created_at: res.created_at || new Date().toISOString(),
+      entities: AppState.stats?.entities || 0, keys: AppState.keys };
+    AppState.vault = [session, ...AppState.vault.filter((s) => s.id !== session.id)].slice(0, 14);
+    persist(); Vault.render(); Restore.renderKeySources(); Restore.loadBundles();
+    chatBadge('');
+    toast(fmtNum(AppState.stats?.entities || 0) + ' entities masked in ' + (AppState.stats?.duration_ms || 40) + ' ms', { icon: 'shield-check' });
+  },
+
+  paintPanes() {
+    $('#paneOriginal').innerHTML = paintOriginal(AppState.original, AppState.spans);
+    const values = new Map(AppState.keys.map((k) => [k.token, k.value]));
+    const s = $('#paneScrubbed'); s.innerHTML = paintTokens(AppState.scrubbed, { values, only: AppState.activeCat });
+    icons(s); this.applyFilter();
+  },
+  paintStats() {
+    const st = AppState.stats || {};
+    const words = Math.max(1, Math.round((st.chars || 0) / 6.2));
+    const cards = [
+      { v: fmtNum(st.entities), l: 'Entities masked', s: st.unique + ' unique keys issued', icon: 'shield-half', c: 'var(--text)' },
+      { v: st.categories || 0, l: 'Detector classes fired', s: 'of 9 armed', icon: 'layers-3', c: 'var(--text)' },
+      { v: (st.entities ? (st.entities / words * 100).toFixed(1) : '0.0'), l: 'PII density', s: 'per 100 words', icon: 'gauge', c: 'var(--text)' },
+      { v: (st.duration_ms || 0) + 'ms', l: 'Scrub time', s: fmtNum(st.chars) + ' chars read', icon: 'timer', c: 'var(--text)' }
+    ];
+    $('#statStrip').innerHTML = cards.map((c) =>
+      '<div class="stat"><div class="flex items-start gap-3"><div class="min-w-0">' +
+      '<p class="l">' + c.l + '</p><p class="v mt-1.5">' + c.v + '</p>' +
+      '<p class="text-[11px] text-[var(--dim)] mt-1">' + c.s + '</p></div>' +
+      '<i data-lucide="' + c.icon + '" style="width:15px;height:15px;color:var(--dim);margin-left:auto;flex:none;margin-top:2px"></i></div></div>').join('');
+    icons($('#statStrip'));
+  },
+  paintChips() {
+    const counts = {}; AppState.keys.forEach((k) => { counts[k.category] = (counts[k.category] || 0) + k.occurrences; });
+    $('#catChips').innerHTML = Object.keys(CATS).filter((c) => counts[c]).map((c) =>
+      '<button class="chip" data-c="' + c + '" style="--tt:' + CATS[c].color + '"><i data-lucide="' + CATS[c].icon +
+      '" style="width:13px;height:13px;color:' + CATS[c].color + '"></i>' + CATS[c].label + '<span class="cnt">' + counts[c] + '</span></button>').join('')
+      || '<span class="text-[11.5px] text-[var(--dim)]">No entities detected — document looks clean.</span>';
+    icons($('#catChips'));
+  },
+  applyFilter() {
+    const only = AppState.activeCat;
+    $$('#paneScrubbed .tok').forEach((t) => t.classList.toggle('dim', !!only && t.dataset.c !== only));
+    $$('#paneOriginal .red').forEach((t) => { t.style.opacity = only && t.dataset.c !== only ? '.28' : '1'; });
+    $$('#catChips .chip').forEach((c) => c.classList.toggle('on', c.dataset.c === only));
+  },
+  paintKeys(q = '') {
+    const rows = AppState.keys.filter((k) => !q || (k.token + k.value + k.category).toLowerCase().includes(q.toLowerCase()));
+    $('#keyCount').textContent = rows.length + (q ? ' / ' + AppState.keys.length : '') + ' keys';
+    $('#keyBody').innerHTML = rows.map((k) => {
+      const meta = CATS[k.category] || { label: k.category, color: '#c4cdd9', icon: 'hash' };
+      return '<tr><td><span class="tok" data-c="' + k.category + '"><i data-lucide="' + meta.icon + '"></i>' + k.token + '</span></td>' +
+        '<td><span class="text-[11px]" style="color:' + meta.color + '">' + meta.label + '</span></td>' +
+        '<td class="mono !text-[11.5px] text-[var(--text)]">' + esc(k.value) + '</td>' +
+        '<td class="text-right mono">' + k.occurrences + '</td></tr>';
+    }).join('') || '<tr><td colspan="4" class="text-[12px] text-[var(--dim)] py-6 text-center">No mapping row matches that filter.</td></tr>';
+    icons($('#keyBody'));
+  },
+
+  reveal() {
+    if (!AppState.keys.length) return toast('Nothing to reveal yet', { tone: 'warn' });
+    const pane = $('#paneOriginalWrap'), veil = $('#lockVeil');
+    pane.classList.remove('masked'); pane.classList.add('revealed'); veil.classList.add('hide');
+    let left = 8;
+    const btn = $('#btnReveal');
+    const tick = setInterval(() => {
+      left--; btn.innerHTML = '<i data-lucide="timer"></i> Re-mask in ' + left + 's';
+      if (left <= 0) { clearInterval(tick); pane.classList.add('masked'); pane.classList.remove('revealed');
+        veil.classList.remove('hide'); btn.innerHTML = '<i data-lucide="eye"></i> Reveal briefly'; icons(btn.parentElement); }
+    }, 1000);
+  },
+
+  sendToChat() {
+    if (!AppState.scrubbed) return toast('Redact a document first', { tone: 'warn' });
+    AppState.chat.ctx = { name: AppState.document.name, text: AppState.scrubbed, keys: AppState.keys, runId: AppState.runId };
+    chatBadge('1');
+    $('#chatCtx').innerHTML = 'Redacted Context: <span class="text-[var(--text)]">' + esc(AppState.chat.ctx.name) + '</span>';
+    $('#chatCtxTokens').textContent = AppState.keys.length + ' PII keys masked';
+    $('#btnDetachCtx').classList.remove('hidden');
+    $('#btnViewSentText').classList.remove('hidden');
+    AppState.chat.history = [];
+    UI.setView('chat'); Chat.render();
+    toast('Redacted text attached to chat (Original file never sent to AI)', { icon: 'shield-check' });
+  },
+
+  purge() {
+    AppState.vault = []; AppState.selectedSessions = []; AppState.csvKeys = null; AppState.keys = [];
+    AppState.scrubbed = ''; AppState.original = ''; AppState.spans = []; AppState.document = null; AppState.stats = null;
+    AppState.chat.ctx = null; AppState.chat.history = [];
+    localStorage.removeItem(CONFIG.LS_VAULT);
+    $('#redactResult').classList.add('hidden'); $('#redactEmpty').classList.remove('hidden');
+    Vault.render(); Restore.renderKeySources(); Chat.render();
+    toast('Session purged — keys deleted from this browser', { icon: 'eraser', tone: 'warn' });
+  }
+};
+
+/* ── vault drawer + sessions ────────────────────────────────────────────── */
+const Vault = {
+  render() {
+    const list = AppState.vault;
+    $('#vaultCount').textContent = list.length + ' run' + (list.length === 1 ? '' : 's');
+    $('#sessionList').innerHTML = list.length ? list.map((s) => {
+      const cats = [...new Set(s.keys.map((k) => k.category))];
+      const sel = AppState.selectedSessions.includes(s.id);
+      return '<div class="card-flat p-3 ' + '' + '" data-ses="' + s.id + '" style="' + (sel ? 'border-color:var(--line3)' : '') + '">' +
+        '<div class="flex items-center gap-2"><i data-lucide="' + (sel ? 'key-round' : 'file-lock-2') + '" style="width:15px;height:15px;color:' + (sel ? 'var(--muted)' : 'var(--dim)') + '"></i>' +
+        '<p class="font-semibold text-[12.5px] truncate flex-1">' + esc(s.document) + '</p>' +
+        '<span class="text-[10.5px] text-[var(--dim)]">' + timeAgo(s.created_at) + '</span></div>' +
+        '<div class="flex items-center gap-2 mt-2 text-[11px] text-[var(--muted)]"><span class="mono">' + s.keys.length + '</span> keys ·' +
+        '<span>' + cats.slice(0, 3).map((c) => CATS[c]?.label || c).join(', ') + '</span>' +
+        (cats.length > 3 ? '<span class="text-[var(--dim)]">+' + (cats.length - 3) + '</span>' : '') + '</div>' +
+        '<div class="flex gap-1.5 mt-2.5"><button class="btn btn-sm flex-1 justify-center" data-sel="' + s.id + '">' + (sel ? 'Selected' : 'Use keys') + '</button>' +
+        '<button class="btn btn-sm" data-dl="' + s.id + '"><i data-lucide="download"></i></button>' +
+        '<button class="btn btn-sm" data-loadchat="' + s.id + '"><i data-lucide="messages-square"></i></button></div></div>';
+    }).join('') : '<p class="text-[12px] text-[var(--dim)] py-8 text-center">No stored runs.<br>Redact a document and its key bundle lands here.</p>';
+    icons($('#sessionList'));
+    Restore.renderKeySources();
+  },
+  async loadFromBackend() {
+    try {
+      const list = await apiService.fetchRecentSessions();
+      if (Array.isArray(list) && list.length) {
+        AppState.vault = list.map((s) => ({ ...s, keys: (s.keys || []).map(normaliseKey) })).concat(AppState.vault).slice(0, 20);
+        this.render(); toast(list.length + ' vault sessions synced', { icon: 'cloud-download' });
+      }
+    } catch (e) { console.info('[vault] using local sessions:', e.message); }
+  }
+};
+/* ══ 9 · RESTORE flow ═════════════════════════════════════════════════════ */
+const Restore = {
+  keys() {
+    if (AppState.keySource === 'csv' && AppState.csvKeys && AppState.csvKeys.length) return AppState.csvKeys;
+    const sel = AppState.selectedSessions;
+    const src = sel.length ? AppState.vault.filter((s) => sel.includes(s.id)) : AppState.vault;
+    const map = new Map();
+    src.forEach((s) => (s.keys || []).forEach((k) => {
+      if (!map.has(k.token)) map.set(k.token, { ...k }); else map.get(k.token).occurrences += k.occurrences || 1;
+    }));
+    if (!map.size && AppState.keys.length) AppState.keys.forEach((k) => map.set(k.token, k));
+    return [...map.values()];
+  },
+  render() { this.renderKeySources(); this.renderResult(); },
+
+  renderKeySources() {
+    const n = this.keys().length;
+    const loaded = $('#loadedCount'), summary = $('#vaultKeySummary'), vaultMode = $('#vaultMode');
+    if (loaded) loaded.textContent = n + (n === 1 ? ' key' : ' keys');
+    if (summary) summary.textContent = n
+      ? n + ' stored key' + (n === 1 ? '' : 's') + ' available for this response.'
+      : 'No stored keys yet. Redact a document or upload a CSV.';
+    if (vaultMode) vaultMode.textContent = AppState.prefs.persist ? 'localStorage' : 'in-memory';
+
+    if ($('#csvInfo') && AppState.csvKeys && AppState.csvKeys.length) {
+      const cats = new Set(AppState.csvKeys.map((k) => k.category));
+      $('#csvInfo').classList.remove('hidden');
+      $('#csvInfo').innerHTML = '<span class="mono text-[var(--ok-soft)]">' + esc(AppState.csvName) + '</span> parsed · ' +
+        AppState.csvKeys.length + ' keys · ' + cats.size + ' categories · never transmitted';
+    } else if ($('#csvInfo')) $('#csvInfo').classList.add('hidden');
+
+    this.scan();
+  },
+
+  scan() {
+    const text = ($('#restoreInput').value || '');
+    const toks = text.match(tokenRe()) || [];
+    const uniq = [...new Set(toks)];
+    const have = new Set(this.keys().map((k) => k.token));
+    const ok = uniq.filter((t) => have.has(t)).length;
+    const miss = uniq.length - ok;
+    const box = $('#restoreScan');
+    box.innerHTML = !text.trim()
+      ? '<span>No tokens detected yet.</span>'
+      : '<i data-lucide="scan-search" style="width:14px;height:14px;color:var(--muted)"></i><span><b class="mono text-[var(--text)]">' + toks.length +
+        '</b> token' + (toks.length === 1 ? '' : 's') + ' · <b class="mono text-[var(--ok-soft)]">' + ok + '</b> resolvable' +
+        (miss ? ' · <b class="mono text-[var(--warn)]">' + miss + '</b> unknown</span>' : '</span>');
+    if (box) icons(box);
+    return toks.length;
+  },
+
+  async loadBundles() {
+    const select = $('#bundleSelect');
+    if (!select) return;
+    try {
+      const bundles = await apiService.fetchBundles();
+      if (!bundles || !bundles.length) return;
+      const currentVal = select.value;
+      select.innerHTML = bundles.map((b) => `<option value="${esc(b.id)}">${esc(b.name)}</option>`).join('');
+      if (bundles.some((b) => b.id === currentVal)) {
+        select.value = currentVal;
+      }
+    } catch (e) {
+      console.warn('Could not load key bundles:', e);
+    }
+  },
+
+  async run() {
+    const text = ($('#restoreInput').value || '').trim();
+    if (!text) return toast('Paste text that contains privacy tokens', { tone: 'warn' });
+    const bundleId = $('#bundleSelect')?.value || 'vault';
+    const keys = this.keys();
+    if (AppState.mode !== 'live' && !keys.length && AppState.keySource === 'csv') {
+      toast('No keys loaded — select a key bundle or upload keys.csv', { tone: 'warn', icon: 'key-round' });
+      return;
+    }
+    const btn = $('#btnRestoreRun2');
+    btn.disabled = true; btn.innerHTML = '<i data-lucide="loader-2" class="spin"></i> Restoring'; icons(btn);
+    let res;
+    try {
+      res = await apiService.depseudonymize(text, AppState.keySource === 'csv' ? AppState.csvFile : null, bundleId);
+    } catch (e) {
+      toast('Backend error — resolved locally instead: ' + e.message, { tone: 'bad', ms: 4200 });
+      AppState.mode = 'mock'; UI.setMode('mock');
+      res = RedactorRestore(text, keys, 'Sandbox fallback');
+    }
+    res.input = text;
+    AppState.restore.result = res;
+    this.renderResult(true);
+    btn.disabled = false; btn.innerHTML = '<i data-lucide="wand-sparkles"></i> Restore'; icons(btn);
+    toast((res.resolved?.length || 0) + ' identities restored from ' + (res.source_label || 'vault'), { icon: 'wand-sparkles' });
+  },
+
+  renderResult(animate) {
+    const res = AppState.restore.result;
+    if (!res) {
+      $('#paneRestored').innerHTML = '<span class="dim">Your restored response will appear here.</span>';
+      $('#unresolvedNote').textContent = 'Your text stays on this device.';
+      $('#btnCopyRestored').classList.add('hidden');
+      $('#btnDlRestored').classList.add('hidden');
+      return;
+    }
+    $('#paneRestored').innerHTML = res.restored_text;
+    $('#btnCopyRestored').classList.remove('hidden');
+    $('#btnDlRestored').classList.remove('hidden');
+    $('#unresolvedNote').innerHTML = res.unresolved.length
+      ? res.resolved.length + ' ' + (res.resolved.length === 1 ? 'identity' : 'identities') + ' restored · ' + res.unresolved.length + ' token' + (res.unresolved.length === 1 ? '' : 's') + ' unresolved.'
+      : res.resolved.length + ' ' + (res.resolved.length === 1 ? 'identity' : 'identities') + ' restored on this device.';
+    icons($('#paneRestored'));
+  },
+
+  async sample() {
+    if (!AppState.keys.length && !AppState.vault.length) { RedactFlow.render(await Mock.pseudorun(null)); await sleep(180); }
+    const keys = AppState.keys.length ? AppState.keys : (AppState.vault[0] && AppState.vault[0].keys) || [];
+    const g = (c, i = 0) => (keys.filter((k) => k.category === c)[i] || {}).token || (c + '_001');
+    $('#restoreInput').value =
+      'Clause review — run summary\n\n' +
+      '1. §4.2 obliges ' + g('ORGANIZATION', 1) + ' to indemnify ' + g('ORGANIZATION') + ' for data-incident claims; the ceiling sits in §4.1 next to the deductible carried by ' + g('ORGANIZATION') + '.\n' +
+      '2. Breach notice must reach ' + g('EMAIL') + ' or ' + g('PHONE') + ' within 24 hours of awareness; the escalation owner is ' + g('PERSON') + '.\n' +
+      '3. Payment runs 30 days from ' + g('DATE') + ', referenced to ' + g('ID') + ' and settled to the account in §2.4.\n' +
+      '4. Authorised recipients of personal data (Schedule 4): ' + g('PERSON', 1) + ', ' + g('PERSON', 2) + ', ' + g('PERSON', 3) + '.\n\n' +
+      'Open question for counsel: keep the notice channel tied to ' + g('PERSON') + ', or move it to ' + g('EMAIL', 1) + '?';
+    this.scan();
+    toast('Sample AI answer loaded', { icon: 'wand-sparkles' });
+    this.run();
+  }
+};
+function syncScroll() {
+  const a = $('#paneMasked'), b = $('#paneRestored');
+  if (!a || a._synced) return;
+  a._synced = true;
+  const link = (from, to) => from.addEventListener('scroll', () => {
+    const r = from.scrollTop / Math.max(1, from.scrollHeight - from.clientHeight);
+    to.scrollTop = r * (to.scrollHeight - to.clientHeight);
+  }, { passive: true });
+  link(a, b); link(b, a);
+}
+
+/* ══ 10 · CHAT flow ═══════════════════════════════════════════════════════ */
+const MODELS = [
+  { id: 'openai/gpt-oss-120b', label: 'GPT OSS · 120B', note: 'flagship reasoning · 131k ctx (recommended)', ctx: '131k' },
+  { id: 'openai/gpt-oss-20b',  label: 'GPT OSS · 20B',  note: 'ultra-fast 1,000 T/s · 131k ctx',          ctx: '131k' },
+  { id: 'qwen/qwen3.8-27b',    label: 'Qwen 3.8 · 27B',  note: 'multimodal & deep reasoning',               ctx: '131k' },
+  { id: 'llama-3.1-8b-instant', label: 'Llama 3.1 · 8B', note: 'requires Enterprise plan on Groq',         ctx: '131k' }
+];
+const SUGGESTIONS = ['Summarise the obligations of each party', 'List every deadline with its clause reference',
+  'What are the liability caps?', 'Quote §4.2 verbatim, tokens intact', 'Which named individuals appear here?'];
+
+const Chat = {
+  ctrl: null, _stream: '', _streaming: false, _id: null,
+  render() {
+    $('#modelGrid').innerHTML = MODELS.map((m) => {
+      const on = AppState.prefs.model === m.id;
+      return '<button class="model-card' + (on ? ' on' : '') + '" data-model="' + m.id + '">' +
+        '<span class="flex items-center gap-2"><i data-lucide="brain-circuit" style="width:14px;height:14px;color:' + (on ? 'var(--ok-soft)' : 'var(--dim)') + '"></i>' +
+        '<span class="mono text-[10px] text-[var(--dim)] ml-auto">' + m.ctx + '</span></span>' +
+        '<b class="block text-[12px] font-semibold mt-1.5">' + m.label + '</b>' +
+        '<span class="block text-[10.5px] text-[var(--dim)]">' + m.note + '</span>' +
+        '<code class="block text-[9.5px] text-[var(--muted)] opacity-70 mt-1 truncate">' + m.id + '</code></button>';
+    }).join('');
+    $('#modelBadge').textContent = AppState.prefs.model;
+    $('#chatEngineLabel').textContent = (AppState.mode === 'live' ? 'FastAPI /api/chat · ' : 'Sandbox engine · ') + AppState.prefs.model;
+    this.renderLog(); this.payload();
+    icons($('#modelGrid'));
+  },
+  renderLog() {
+    const log = $('#chatLog'), h = AppState.chat.history;
+    log.innerHTML = h.length ? h.map((m) => this.bubble(m)).join('')
+      : '<div class="py-12 text-center"><div class="dz-ic" style="margin:0 auto 14px;width:36px;height:36px">' +
+        '<i data-lucide="messages-square" style="width:16px;height:16px"></i></div>' +
+        '<p class="text-[13.5px] font-semibold">Ask about the document</p>' +
+        '<p class="dim mt-1.5" style="font-size:12px;max-width:46ch;margin-left:auto;margin-right:auto">Only tokenised text is sent. Flip auto-restoration above and privacy tokens read as real names in <i>your</i> view, while the model keeps reasoning about placeholders.</p></div>';
+    icons(log);
+    log.scrollTop = log.scrollHeight;
+    const c = AppState.chat.ctx;
+    $('#chatCtx').innerHTML = c ? ('Redacted Context: <span class="text-[var(--text)]">' + esc(c.name) + '</span>') : 'No document attached';
+    $('#chatCtxTokens').textContent = c ? (((c.keys && c.keys.length) || 0) + ' PII keys masked') : '0 keys';
+    $('#btnDetachCtx').classList.toggle('hidden', !c);
+    $('#btnViewSentText').classList.toggle('hidden', !c);
+    chatBadge(c ? String(Math.max(1, Math.floor(h.length / 2))) : '');
+  },
+  bubble(m) {
+    const who = m.role === 'user' ? 'You' : 'NLP Shield AI';
+    const body = m.role === 'user' ? '<p>' + esc(m.text).replace(/\n/g, '<br>') + '</p>' : this.body(m.text);
+    const foot = m.role === 'assistant'
+      ? '<div class="flex items-center gap-2 mt-2.5 pt-2 border-t border-[var(--line)] text-[10px] text-[var(--dim)] flex-wrap">' +
+        '<i data-lucide="' + (m.restored ? 'eye' : 'shield') + '" style="width:11px;height:11px"></i>' +
+        (m.restored ? 'auto-restored locally · ' + (m.hits || 0) + ' identities resolved' : 'placeholder view · model never saw the originals') +
+        '<span class="mono ml-auto mr-1">' + esc(m.model || '') + '</span>' +
+        '<button class="btn btn-sm btn-ghost" data-msg-copy="' + m.id + '" title="Copy response text"><i data-lucide="copy" style="width:12px;height:12px"></i> Copy</button>' +
+        '<button class="btn btn-sm btn-primary ml-1" data-msg-restore="' + m.id + '" title="Send this response to Restore tab" style="font-size:11px;padding:3px 9px;gap:5px;display:inline-flex;align-items:center"><i data-lucide="wand-sparkles" style="width:12px;height:12px"></i> Send to restore</button></div>' : '';
+    return '<div class="flex gap-2.5' + (m.role === 'user' ? ' justify-end' : '') + '" data-msg="' + m.id + '">' +
+      (m.role === 'assistant' ? '<span class="ava"><i data-lucide="shield"></i></span>' : '') +
+      '<div class="bubble ' + m.role + (m.role === 'assistant' ? ' flex-1' : ' max-w-[88%]') + '"><p class="eyebrow mb-1.5">' + who + (m.error ? ' · <span class="txt-err">error</span>' : '') + '</p>' +
+      '<div class="msg-body">' + body + '</div>' + foot + '</div></div>';
+  },
+  body(text) {
+    const pool = (AppState.chat.ctx && AppState.chat.ctx.keys && AppState.chat.ctx.keys.length) ? AppState.chat.ctx.keys : AppState.keys;
+    const keys = new Map((pool || []).map((k) => [k.token, k]));
+    const auto = AppState.prefs.autoRestore;
+    let hits = 0;
+
+    const lines = String(text || '').replace(/\r/g, '').split('\n');
+    const outHtml = [];
+    let i = 0;
+
+    const formatInline = (str) => {
+      let s = esc(str);
+      s = s.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+      s = s.replace(/\*(.+?)\*/g, '<i>$1</i>');
+      s = s.replace(/`([^`]+)`/g, '<code class="mono px-1 py-0.5 rounded bg-[var(--surface2)] text-[11px]">$1</code>');
+      return s;
+    };
+
+    const isTableRow = (str) => {
+      if (!str) return false;
+      const s = str.trim();
+      return s.includes('|') && (s.startsWith('|') || s.endsWith('|') || s.split('|').length >= 3);
+    };
+
+    const isTableDivider = (str) => {
+      if (!str) return false;
+      const s = str.trim().replace(/^\||\|$/g, '').trim();
+      return /^[-:\s|]+$/.test(s) && s.includes('-');
+    };
+
+    while (i < lines.length) {
+      const line = lines[i];
+
+      // 1. Table block detection (supports standard tables & tables with blank lines)
+      if (isTableRow(line)) {
+        let nextIdx = i + 1;
+        while (nextIdx < lines.length && !lines[nextIdx].trim()) nextIdx++;
+        if (nextIdx < lines.length && isTableDivider(lines[nextIdx])) {
+          const headerRow = line.trim().replace(/^\||\|$/g, '').split('|').map(c => c.trim());
+          i = nextIdx + 1;
+          const rows = [];
+          while (i < lines.length) {
+            if (!lines[i].trim()) {
+              let peek = i + 1;
+              while (peek < lines.length && !lines[peek].trim()) peek++;
+              if (peek < lines.length && isTableRow(lines[peek]) && !lines[peek].trim().startsWith('#')) {
+                i = peek;
+              } else {
+                break;
+              }
+            }
+            if (isTableRow(lines[i]) && !lines[i].trim().startsWith('#')) {
+              const cells = lines[i].trim().replace(/^\||\|$/g, '').split('|').map(c => c.trim());
+              rows.push(cells);
+              i++;
+            } else {
+              break;
+            }
+          }
+          let tbl = '<div class="overflow-x-auto my-3 rounded-lg border border-[var(--line)] bg-[var(--surface)] shadow-sm"><table class="w-full text-[12px] border-collapse text-left">';
+          tbl += '<thead><tr class="border-b border-[var(--line)] bg-[var(--card)]/80 text-[11px] uppercase tracking-wider text-[var(--muted)]">';
+          headerRow.forEach(h => { tbl += '<th class="px-3 py-2 font-semibold text-[var(--text)]">' + formatInline(h) + '</th>'; });
+          tbl += '</tr></thead><tbody>';
+          rows.forEach((r) => {
+            tbl += '<tr class="border-b border-[var(--line)] last:border-0 hover:bg-[var(--card)]/40 transition-colors">';
+            r.forEach(c => { tbl += '<td class="px-3 py-2 text-[var(--muted)] align-top">' + formatInline(c) + '</td>'; });
+            tbl += '</tr>';
+          });
+          tbl += '</tbody></table></div>';
+          outHtml.push(tbl);
+          continue;
+        }
+      }
+
+      // 2. Horizontal rule
+      if (/^\s*([*_-]\s*){3,}\s*$/.test(line)) {
+        outHtml.push('<hr class="my-3 border-[var(--line)]" />');
+        i++;
+        continue;
+      }
+
+      // 3. Headings
+      const h3 = line.match(/^\s*###\s+(.+)$/);
+      if (h3) {
+        outHtml.push('<h4 class="font-semibold text-[13px] text-[var(--text)] mt-3.5 mb-1.5 flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-[var(--ok-soft)]"></span>' + formatInline(h3[1]) + '</h4>');
+        i++;
+        continue;
+      }
+      const h2 = line.match(/^\s*##\s+(.+)$/);
+      if (h2) {
+        outHtml.push('<h3 class="font-semibold text-[14px] text-[var(--text)] mt-4 mb-2 flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-[var(--ok-soft)]"></span>' + formatInline(h2[1]) + '</h3>');
+        i++;
+        continue;
+      }
+      const h1 = line.match(/^\s*#\s+(.+)$/);
+      if (h1) {
+        outHtml.push('<h2 class="font-bold text-[15.5px] text-[var(--text)] mt-4 mb-2.5">' + formatInline(h1[1]) + '</h2>');
+        i++;
+        continue;
+      }
+
+      // 4. Bullet lists
+      if (/^\s*[•*\-]\s+/.test(line)) {
+        outHtml.push('<div class="flex gap-2 my-1"><span class="text-[var(--muted)] flex-none">•</span><span>' + formatInline(line.replace(/^\s*[•*\-]\s+/, '')) + '</span></div>');
+        i++;
+        continue;
+      }
+
+      // 5. Numbered lists
+      const num = line.match(/^\s*(\d+)\.\s+(.+)$/);
+      if (num) {
+        outHtml.push('<div class="flex gap-2 my-1"><span class="mono text-[var(--muted)] flex-none">' + num[1] + '.</span><span>' + formatInline(num[2]) + '</span></div>');
+        i++;
+        continue;
+      }
+
+      // 6. Blockquotes
+      if (/^\s*&gt;\s?|^\s*>\s?/.test(line)) {
+        outHtml.push('<div class="card-flat p-2.5 my-1.5 text-[12px] text-[#c9d8e8] border-l-2 border-[var(--ok-soft)]">' + formatInline(line.replace(/^\s*&gt;\s?|^\s*>\s?/, '')) + '</div>');
+        i++;
+        continue;
+      }
+
+      // 7. Regular paragraph
+      if (line.trim()) {
+        outHtml.push('<p class="my-1">' + formatInline(line) + '</p>');
+      }
+      i++;
+    }
+
+    const html = outHtml.join('');
+    const out = html.replace(tokenRe(), (t) => {
+      const c = catOf(t), meta = CATS[c] || { icon: 'hash', label: c, color: '#c4cdd9' };
+      if (auto && keys.has(t)) {
+        hits++;
+        return '<mark class="restored restoring" data-tok="' + t + '" title="' + t + ' → restored from your vault">' + esc(keys.get(t).value) + '</mark>';
+      }
+      return '<span class="tok" data-c="' + c + '" data-tok="' + t + '"><i data-lucide="' + meta.icon + '"></i>' + t + '</span>';
+    });
+    AppState.chat.lastHits = hits;
+    return out;
+  },
+  _onStream(text) {
+    if (!this._streaming) return;
+    this._stream = text;
+    const host = $('#chatLog [data-msg="' + this._id + '"] .msg-body');
+    if (host) { host.innerHTML = this.body(text); icons(host); const log = $('#chatLog'); log.scrollTop = log.scrollHeight; }
+  },
+  async typeOut(text) {
+    this._streaming = true;
+    const step = Math.max(4, Math.ceil(text.length / 150));
+    for (let i = 0; i < text.length; i += step) { this._onStream(text.slice(0, i + step)); await sleep(13); }
+    this._onStream(text);
+    this._streaming = false;
+  },
+  focus() { const i = $('#chatInput'); if (i && !i.value) setTimeout(() => i.focus(), 120); },
+  setAuto(v) {
+    AppState.prefs.autoRestore = !!v;
+    const sw = $('#autoRestoreSwitch');
+    sw.classList.toggle('on', AppState.prefs.autoRestore);
+    sw.setAttribute('aria-checked', String(AppState.prefs.autoRestore));
+    $('#autoRestoreState').textContent = AppState.prefs.autoRestore ? 'ON' : 'OFF';
+    $('#autoRestoreState').style.color = AppState.prefs.autoRestore ? 'var(--ok-soft)' : 'var(--dim)';
+    this.renderLog();
+    if (AppState.prefs.autoRestore) $$('mark.restored').forEach((n) => { n.classList.remove('restoring'); void n.offsetWidth; n.classList.add('restoring'); });
+    persist();
+  },
+  toggleAuto() {
+    this.setAuto(!AppState.prefs.autoRestore);
+    if (AppState.chat.history.some((m) => m.role === 'assistant'))
+      toast(AppState.prefs.autoRestore ? 'Magic switch on — tokens now read as real identities' : 'Magic switch off — placeholders only',
+        { icon: AppState.prefs.autoRestore ? 'sparkles' : 'eye-off', tone: AppState.prefs.autoRestore ? 'ok' : 'warn' });
+  },
+  async send(forced) {
+    const inp = $('#chatInput');
+    const text = (forced || inp.value || '').trim();
+    if (!text || AppState.chat.busy) return;
+    inp.value = ''; inp.style.height = 'auto'; $('#chatChars').textContent = '0 chars';
+    const push = (o) => { o.id = uid('m'); AppState.chat.history.push(o); return o; };
+    push({ role: 'user', text });
+
+    if (!AppState.prefs.groqKey) {
+      push({
+        role: 'assistant',
+        text: '⚠️ Please connect a Groq API key inside Advanced Settings before chatting with your document.',
+        model: AppState.prefs.model,
+        error: true
+      });
+      this.renderLog();
+      return;
+    }
+
+    if (!AppState.chat.ctx) toast('No document attached — the answer will be generic', { tone: 'warn', icon: 'link-off' });
+    const ai = push({ role: 'assistant', text: '', model: AppState.prefs.model });
+    this._id = ai.id;
+    AppState.chat.busy = true;
+    this.renderLog();
+    const host = $('#chatLog [data-msg="' + ai.id + '"] .msg-body');
+    if (host) host.innerHTML = '<span class="typing flex items-center gap-1"><i></i><i></i><i></i></span>';
+    this._streaming = true;
+    const ctrl = new AbortController(); this.ctrl = ctrl;
+    try {
+      const res = await apiService.chatWithDocument({
+        message: text, context: (AppState.chat.ctx && AppState.chat.ctx.text) || '', apiKey: AppState.prefs.groqKey,
+        model: AppState.prefs.model, autoRestore: AppState.prefs.autoRestore,
+        temperature: AppState.prefs.temp, maxTokens: AppState.prefs.maxTok,
+        system: $('#systemPrompt').value, history: AppState.chat.history.slice(0, -2), signal: ctrl.signal
+      });
+      const reply = (res.reply || '').trim() || 'The model returned an empty response.';
+      if (res.source === 'mock') await this.typeOut(reply); else this._streaming = false;
+      ai.text = reply; ai.raw = reply;
+      ai.restored = AppState.prefs.autoRestore; ai.hits = AppState.chat.lastHits || 0;
+      const modelUsed = res.model_used || res.model || AppState.prefs.model;
+      if (res.model_used && res.model_used !== AppState.prefs.model) {
+        AppState.prefs.model = res.model_used;
+        const b = $('#modelBadge'); if (b) b.textContent = res.model_used;
+        $$('.model-card').forEach((c) => c.classList.toggle('on', c.dataset.model === res.model_used));
+      }
+      ai.model = (res.source === 'live' ? 'FastAPI · ' : res.source === 'groq' ? 'Groq direct · ' : 'sandbox · ') + modelUsed;
+    } catch (err) {
+      ai.error = true;
+      ai.text = (err && err.name === 'AbortError') ? 'Request cancelled.'
+        : 'Request failed: ' + err.message + '\n\nSandbox mode keeps working — if you expected the FastAPI proxy, open **Backend connection** and switch mode to Live.';
+    }
+    this._streaming = false; this.ctrl = null; AppState.chat.busy = false;
+    this.renderLog(); this.payload(); persist();
+  },
+  payload() {
+    const body = {
+      message: '<user prompt>',
+      context: ((AppState.chat.ctx && AppState.chat.ctx.text) || '').slice(0, 40) + (AppState.chat.ctx ? '…' : 'none'),
+      model: AppState.prefs.model, temperature: AppState.prefs.temp, max_tokens: AppState.prefs.maxTok,
+      auto_restore: AppState.prefs.autoRestore,
+      api_key: AppState.prefs.groqKey ? 'gsk_••' + AppState.prefs.groqKey.slice(-4) : null
+    };
+    $('#payloadPreview').innerHTML =
+      '<span class="text-[10px] text-[var(--dim)]">body of </span><span class="text-[var(--ok-soft)]">POST</span> ' +
+      esc(AppState.mode === 'live' ? url('/api/chat') : '/api/chat · sandbox') +
+      '<br>' + esc(JSON.stringify(body, null, 1)).replace(/\n/g, '<br>').replace(/ {2}/g, '&nbsp;&nbsp;');
+    const keyChip = $('#keyChipLabel');
+    if (keyChip) {
+      keyChip.textContent = AppState.prefs.groqKey ? 'Key ••' + AppState.prefs.groqKey.slice(-4) : 'No key';
+      keyChip.style.color = AppState.prefs.groqKey ? 'var(--ok-soft)' : 'var(--muted)';
+    }
+    $('#tempVal').textContent = Number(AppState.prefs.temp).toFixed(2);
+    $('#maxTokVal').textContent = AppState.prefs.maxTok;
+    if (document.activeElement !== $('#groqKey')) $('#groqKey').value = AppState.prefs.groqKey || '';
+  }
+};
+
+/* ══ 11 · persistence ═════════════════════════════════════════════════════ */
+function persist() {
+  const p = { ...AppState.prefs };
+  if (!p.persist) delete p.groqKey;
+  try {
+    localStorage.setItem(CONFIG.LS_PREFS, JSON.stringify({ p, apiBase: CONFIG.API_BASE, mode: CONFIG.MODE }));
+    if (p.persist) localStorage.setItem(CONFIG.LS_VAULT, JSON.stringify(AppState.vault.slice(0, 8)));
+  } catch (_) {}
+}
+function restorePrefs() {
+  let j = {};
+  try { j = JSON.parse(localStorage.getItem(CONFIG.LS_PREFS) || '{}'); } catch (_) {}
+  if (j.p) Object.assign(AppState.prefs, j.p);
+  const retired = ['llama-3.1-8b-instant', 'llama-3.3-70b-versatile', 'llama3-70b-8192', 'llama3-8b-8192', 'gemma2-9b-it'];
+  if (!AppState.prefs.model || retired.includes(AppState.prefs.model)) {
+    AppState.prefs.model = 'openai/gpt-oss-120b';
+  }
+  if (!AppState.prefs.maxTok || AppState.prefs.maxTok < 2048) {
+    AppState.prefs.maxTok = 3072;
+  }
+  if (j.apiBase !== undefined) CONFIG.API_BASE = j.apiBase;
+  CONFIG.MODE = 'live';
+  AppState.mode = 'live';
+  UI.setMode('live');
+  $$('#modeTabs button').forEach((b) => b.classList.toggle('on', b.dataset.mode === 'live'));
+  try {
+    const v = JSON.parse(localStorage.getItem(CONFIG.LS_VAULT) || '[]');
+    if (Array.isArray(v) && v.length && AppState.prefs.persist) AppState.vault = v.map((s) => ({ ...s, keys: (s.keys || []).map(normaliseKey) }));
+  } catch (_) {}
+  $('#apiBaseInput').value = CONFIG.API_BASE || '';
+  $('#tempRange').value = AppState.prefs.temp;
+  $('#maxTokRange').value = AppState.prefs.maxTok;
+  $('#persistSwitch').classList.toggle('on', !!AppState.prefs.persist);
+  $('#directSwitch').classList.toggle('on', !!AppState.prefs.direct);
+  $('#groqKey').value = AppState.prefs.groqKey || '';
+  $('#groqKey').type = 'password';
+}
+
+/* ══ 12 · wiring ══════════════════════════════════════════════════════════ */
+function bind() {
+  $$('.side-item[data-view]').forEach((b) => b.addEventListener('click', () => UI.setView(b.dataset.view)));
+  $('#btnVault').addEventListener('click', () => UI.openDrawer('vaultDrawer'));
+  $('#btnCloseVault').addEventListener('click', UI.closeOverlays);
+  $('#btnChatSettings').addEventListener('click', () => UI.openDrawer('chatDrawer'));
+  $('#btnCloseChatSettings').addEventListener('click', UI.closeOverlays);
+  $('#btnViewSentText').addEventListener('click', () => {
+    if (!AppState.chat.ctx || !AppState.chat.ctx.text) return;
+    const body = $('#contextModalBody');
+    const values = new Map((AppState.chat.ctx.keys || []).map((k) => [k.token, k.value]));
+    body.innerHTML = paintTokens(AppState.chat.ctx.text, { values });
+    icons(body);
+    $('#contextModal').classList.add('on');
+    $('#overlay').classList.add('on');
+  });
+  $('#btnCloseContextModal').addEventListener('click', UI.closeOverlays);
+  $('#overlay').addEventListener('click', UI.closeOverlays);
+  $('#cmdkOverlay').addEventListener('click', UI.closeOverlays);
+  $$('[data-close]').forEach((b) => b.addEventListener('click', UI.closeOverlays));
+  $('#btnSettings').addEventListener('click', () => {
+    const panel = $('#connectionDetails');
+    panel.classList.toggle('hidden');
+    if (!panel.classList.contains('hidden')) panel.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  });
+
+  $('#sessionList').addEventListener('click', (e) => {
+    const sel = e.target.closest('[data-sel]'), dl = e.target.closest('[data-dl]'), lc = e.target.closest('[data-loadchat]');
+    if (sel) {
+      const id = sel.dataset.sel;
+      AppState.selectedSessions = AppState.selectedSessions.includes(id) ? AppState.selectedSessions.filter((x) => x !== id) : [...AppState.selectedSessions, id];
+      Vault.render(); Restore.renderKeySources();
+      toast(AppState.selectedSessions.length ? 'Keys scoped for restoration' : 'No session selected — the whole vault is used', { icon: 'key-round' });
+    }
+    if (dl) { const s = AppState.vault.find((x) => x.id === dl.dataset.dl); download('keys-' + s.document.replace(/\.[^.]+$/, '') + '.csv', csvFor(s.keys, s.document), 'text/csv'); }
+    if (lc) {
+      const s = AppState.vault.find((x) => x.id === lc.dataset.loadchat);
+      AppState.chat.ctx = { name: s.document + ' · keys only', text: '', keys: s.keys, runId: s.id, keysOnly: true };
+      AppState.selectedSessions = [s.id];
+      UI.closeOverlays(); UI.setView('chat');
+      toast('Vault keys scoped to the chat session', { icon: 'key-round' });
+    }
+  });
+  $('#btnVaultPurge').addEventListener('click', () => {
+    AppState.vault = []; AppState.selectedSessions = []; AppState.csvKeys = null;
+    try { localStorage.removeItem(CONFIG.LS_VAULT); } catch (_) {}
+    Vault.render(); Restore.renderKeySources(); UI.closeOverlays();
+    toast('Vault emptied — keys deleted from this browser', { tone: 'warn', icon: 'trash-2' });
+  });
+
+  /* backend connection */
+  $('#modeTabs').addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-mode]'); if (!b) return;
+    $$('#modeTabs button').forEach((x) => x.classList.toggle('on', x === b));
+    CONFIG.MODE = b.dataset.mode;
+    if (b.dataset.mode === 'auto') { const r = await apiService.probe(); UI.setMode(r.ok ? 'live' : 'mock'); setProbe(r); }
+    else UI.setMode(b.dataset.mode);
+    persist();
+  });
+  $('#btnProbe').addEventListener('click', async () => {
+    CONFIG.API_BASE = $('#apiBaseInput').value.trim().replace(/\/+$/, '');
+    $('#probeResult').innerHTML = '<span class="dot live"></span> Probing ' + esc(url(CONFIG.HEALTH)) + ' …';
+    setProbe(await apiService.probe());
+    persist();
+  });
+  $('#btnSaveConn').addEventListener('click', () => {
+    CONFIG.API_BASE = $('#apiBaseInput').value.trim().replace(/\/+$/, '');
+    persist(); UI.closeOverlays();
+    toast('Connection applied · base “' + (CONFIG.API_BASE || 'same origin') + '”', { icon: 'plug-zap' });
+    Vault.loadFromBackend();
+  });
+
+  /* redact workspace */
+  $('#btnNewDoc').addEventListener('click', () => {
+    $('#redactResult').classList.add('hidden'); $('#redactWork').classList.remove('active'); $('#redactEmpty').classList.remove('hidden');
+    AppState.keys = []; AppState.spans = []; AppState.scrubbed = ''; AppState.original = ''; AppState.document = null; AppState.stats = null;
+    AppState.chat.ctx = null;
+    Restore.renderKeySources();
+    Chat.renderLog();
+    toast('Workspace reset — key bundle stays in the vault', { icon: 'rotate-ccw' });
+  });
+  $('#btnReveal').addEventListener('click', () => RedactFlow.reveal());
+  $('#redactResult').addEventListener('click', (e) => {
+    const act = e.target.closest('[data-act]'), peek = e.target.closest('[data-peek]'), chip = e.target.closest('#catChips .chip');
+    if (act && act.dataset.act === 'reveal') RedactFlow.reveal();
+    if (act && act.dataset.act === 'copy-scrubbed') copyText(AppState.scrubbed, 'Scrubbed text copied');
+    if (act && act.dataset.act === 'dl-txt') download(((AppState.document && AppState.document.name) || 'document').replace(/\.[^.]+$/, '') + '.redacted.txt', AppState.scrubbed);
+    if (chip) { AppState.activeCat = AppState.activeCat === chip.dataset.c ? null : chip.dataset.c; RedactFlow.applyFilter(); }
+    if (peek) {
+      const t = $('#paneScrubbed [data-tok="' + peek.dataset.peek + '"]');
+      if (t) { t.scrollIntoView({ block: 'center', behavior: 'smooth' }); t.classList.remove('tok-hit'); void t.offsetWidth; t.classList.add('tok-hit'); }
+    }
+  });
+  $('#keySearch').addEventListener('input', (e) => RedactFlow.paintKeys(e.target.value));
+  $('#btnDownloadCsv').addEventListener('click', () => AppState.keys.length
+    ? download('vaultdoc-keys-' + (AppState.runId || 'run') + '.csv', csvFor(AppState.keys, AppState.document && AppState.document.name), 'text/csv')
+    : toast('Nothing redacted yet', { tone: 'warn' }));
+  $('#btnSendToChat').addEventListener('click', RedactFlow.sendToChat);
+
+  /* restore workspace */
+  $('#srcTabs').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-src]'); if (!b) return;
+    AppState.keySource = b.dataset.src;
+    $$('#srcTabs button').forEach((x) => x.classList.toggle('on', x === b));
+    $('#srcVault').classList.toggle('hidden', AppState.keySource !== 'vault');
+    $('#srcCsv').classList.toggle('hidden', AppState.keySource !== 'csv');
+    Restore.renderKeySources();
+  });
+  const bSelect = $('#bundleSelect');
+  if (bSelect) {
+    bSelect.addEventListener('change', (e) => {
+      const selected = e.target.value;
+      const summary = $('#vaultKeySummary');
+      if (summary) {
+        summary.textContent = selected === 'vault'
+          ? 'Active Vault Session: using all keys stored in the active database session.'
+          : 'Using key bundle ' + selected + ' for restoration.';
+      }
+    });
+  }
+  $('#btnCsvPick').addEventListener('click', (e) => { e.preventDefault(); $('#csvInput').click(); });
+  $('#csvInput').addEventListener('change', () => { const f = $('#csvInput').files[0]; if (f) RestoreCsv.load(f); $('#csvInput').value = ''; });
+  const csvz = $('#csvDrop');
+  ['dragenter', 'dragover'].forEach((ev) => csvz.addEventListener(ev, (e) => { e.preventDefault(); e.stopPropagation(); csvz.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach((ev) => csvz.addEventListener(ev, (e) => { e.preventDefault(); e.stopPropagation(); csvz.classList.remove('over'); }));
+  csvz.addEventListener('drop', (e) => { const f = e.dataTransfer.files && e.dataTransfer.files[0]; if (f) RestoreCsv.load(f); });
+  $('#restoreInput').addEventListener('input', debounce(() => Restore.scan(), 200));
+  $('#btnRestoreRun2').addEventListener('click', () => Restore.run());
+  $('#btnClearRestore').addEventListener('click', () => { $('#restoreInput').value = ''; AppState.restore.result = null; Restore.render(); });
+  $('#btnPaste').addEventListener('click', async () => {
+    try { $('#restoreInput').value = await navigator.clipboard.readText(); Restore.scan(); toast('Pasted from clipboard', { icon: 'clipboard-paste' }); }
+    catch (_) { toast('Clipboard read blocked — paste manually', { tone: 'warn' }); }
+  });
+  $('#restoreResult').addEventListener('mouseover', (e) => hit(e.target.closest('[data-tok]') && e.target.closest('[data-tok]').dataset.tok));
+  $('#restoreResult').addEventListener('mouseleave', () => hit(null));
+  $('#btnCopyRestored').addEventListener('click', () => {
+    const r = AppState.restore.result; if (!r) return toast('Nothing restored yet', { tone: 'warn' });
+    copyText(r.plain || '', 'Restored text copied — handle it as confidential');
+  });
+  $('#btnDlRestored').addEventListener('click', () => {
+    const r = AppState.restore.result; if (!r) return toast('Nothing restored yet', { tone: 'warn' });
+    download('restored-answer.txt', r.plain || '');
+  });
+
+  /* chat workspace */
+  $('#autoRestoreSwitch').addEventListener('click', () => Chat.toggleAuto());
+  $('#autoRestoreSwitch').addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); Chat.toggleAuto(); } });
+  const inp = $('#chatInput');
+  inp.addEventListener('input', () => {
+    inp.style.height = 'auto'; inp.style.height = Math.min(132, inp.scrollHeight) + 'px';
+    $('#chatChars').textContent = inp.value.length + ' chars';
+  });
+  inp.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      Chat.send();
+    }
+  });
+  $('#btnSend').addEventListener('click', () => Chat.send());
+  $('#chatLog').addEventListener('click', (e) => {
+    const c = e.target.closest('[data-msg-copy]');
+    if (c) {
+      const m = AppState.chat.history.find((x) => x.id === c.dataset.msgCopy);
+      if (m) copyText(m.raw || m.text, 'Answer copied');
+      return;
+    }
+    const r = e.target.closest('[data-msg-restore]');
+    if (r) {
+      const m = AppState.chat.history.find((x) => x.id === r.dataset.msgRestore);
+      if (m && (m.raw || m.text)) {
+        $('#restoreInput').value = m.raw || m.text;
+        UI.setView('restore');
+        Restore.scan();
+        Restore.run();
+        toast('Sent to Restore tab — restoring identities', { icon: 'wand-sparkles' });
+      }
+      return;
+    }
+  });
+  $('#modelGrid').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-model]'); if (!b) return;
+    AppState.prefs.model = b.dataset.model; Chat.render(); persist();
+    toast('Model set to ' + b.dataset.model, { icon: 'cpu' });
+  });
+  $('#groqKey').addEventListener('input', debounce((e) => { AppState.prefs.groqKey = e.target.value.trim(); Chat.payload(); persist(); }, 350));
+  $('#btnPeekKey').addEventListener('click', () => { const k = $('#groqKey'); k.type = k.type === 'password' ? 'text' : 'password'; });
+  [['#persistSwitch', 'persist'], ['#directSwitch', 'direct']].forEach(([sel, key]) => {
+    $(sel).addEventListener('click', () => {
+      AppState.prefs[key] = !AppState.prefs[key];
+      $(sel).classList.toggle('on', AppState.prefs[key]);
+      $(sel).setAttribute('aria-checked', String(AppState.prefs[key]));
+      if (key === 'direct' && AppState.prefs.direct) toast('Direct Groq mode — the key travels from your browser', { tone: 'warn', icon: 'alert-triangle' });
+      persist();
+    });
+  });
+  $('#tempRange').addEventListener('input', (e) => { AppState.prefs.temp = parseFloat(e.target.value); Chat.payload(); });
+  $('#tempRange').addEventListener('change', persist);
+  $('#maxTokRange').addEventListener('input', (e) => { AppState.prefs.maxTok = parseInt(e.target.value, 10); Chat.payload(); });
+  $('#maxTokRange').addEventListener('change', persist);
+  $('#btnCopyPayload').addEventListener('click', () => copyText(JSON.stringify({
+    endpoint: AppState.mode === 'live' ? url('/api/chat') : '/api/chat', model: AppState.prefs.model,
+    temperature: AppState.prefs.temp, max_tokens: AppState.prefs.maxTok, auto_restore: AppState.prefs.autoRestore,
+    context_chars: ((AppState.chat.ctx && AppState.chat.ctx.text) || '').length, system: $('#systemPrompt').value
+  }, null, 2), 'Request body copied'));
+  $('#btnDetachCtx').addEventListener('click', () => { AppState.chat.ctx = null; Chat.renderLog(); Chat.payload(); toast('Context detached', { icon: 'link-off' }); });
+
+  /* command palette */
+  $('#cmdkInput').addEventListener('input', (e) => { UI.cmdk.sel = 0; UI.cmdk.list(e.target.value); });
+  $('#cmdkList').addEventListener('click', (e) => { const r = e.target.closest('[data-n]'); if (r) UI.cmdk.exec(+r.dataset.n); });
+
+  document.addEventListener('keydown', (e) => {
+    const ae = document.activeElement || {};
+    const typing = /INPUT|TEXTAREA/.test(ae.tagName || '') || ae.isContentEditable;
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); UI.cmdk.open ? UI.closeOverlays() : UI.cmdk.show(); return; }
+    if (UI.cmdk.open) {
+      if (e.key === 'Escape') { UI.closeOverlays(); return; }
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault(); const n = (UI.cmdk.filtered || []).length || 1;
+        UI.cmdk.sel = (UI.cmdk.sel + (e.key === 'ArrowDown' ? 1 : n - 1)) % n;
+        UI.cmdk.list($('#cmdkInput').value); return;
+      }
+      if (e.key === 'Enter') { e.preventDefault(); UI.cmdk.exec(UI.cmdk.sel); return; }
+    }
+    if (e.key === 'Escape') UI.closeOverlays();
+    if (!typing && ['1', '2', '3'].includes(e.key)) UI.setView(['redact', 'restore', 'chat'][+e.key - 1]);
+    if (!typing && e.key.toLowerCase() === 'r' && AppState.view === 'redact' && AppState.keys.length) RedactFlow.reveal();
+    if (!typing && e.key === '/') { e.preventDefault(); UI.cmdk.show(); }
+  });
+}
+function setProbe(r) {
+  const el = $('#probeResult'); if (!el) return;
+  el.innerHTML = '<span class="dot' + (r.ok ? '' : ' warn') + '"></span> ' +
+    (r.ok ? 'OK · HTTP ' + r.status + ' at ' + esc(url(CONFIG.HEALTH)) : 'Unreachable · ' + esc(r.reason || 'no API on this origin'));
+  icons(el);
+}
+const RestoreCsv = {
+  async load(file) {
+    if (!/\.csv$/i.test(file.name) && !/csv/i.test(file.type || '')) return toast('That is not a CSV file', { tone: 'bad' });
+    const keys = Mock.parseCsv(await file.text());
+    if (!keys.length) return toast('No valid “token,category,value” rows found', { tone: 'bad', ms: 4200 });
+    AppState.csvKeys = keys; AppState.csvName = file.name; AppState.csvFile = file;
+    AppState.keySource = 'csv';
+    $$('#srcTabs button').forEach((b) => b.classList.toggle('on', b.dataset.src === 'csv'));
+    $('#srcVault').classList.add('hidden'); $('#srcCsv').classList.remove('hidden');
+    Restore.renderKeySources();
+    toast(keys.length + ' keys loaded from ' + file.name, { icon: 'key-round' });
+  }
+};
+function hit(tok) { $$('#restoreResult [data-tok]').forEach((n) => n.classList.toggle('on-hit', !!tok && n.dataset.tok === tok)); }
+function debounce(fn, ms = 200) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
+
+/* ══ 13 · boot ════════════════════════════════════════════════════════════ */
+(async function boot() {
+  restorePrefs();
+  bind();
+  UI.initDrop();
+  if (AppState.prefs.autoRestore) Chat.setAuto(true);
+  UI.setView('redact');
+  icons();
+  const probe = await apiService.probe();
+  UI.setMode(probe.ok ? 'live' : 'mock');
+  setProbe(probe);
+  await Vault.loadFromBackend();
+  Vault.render();
+  Restore.render();
+  await Restore.loadBundles();
+  Chat.render();
+  console.info('%cVaultDoc ' + CONFIG.VERSION, 'color:#fafafa;font-weight:700',
+    'ready · set CONFIG.API_BASE (or use the connection modal) to attach FastAPI');
+})();
+</script>
+</body>
+</html>

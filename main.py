@@ -356,7 +356,7 @@ def get_analyzer():
             "ner_model_configuration": {
                 "model_to_presidio_entity_mapping": {
                     "PERSON": "PERSON", "PER": "PERSON",
-                    "GPE": "LOCATION", "LOC": "LOCATION", "FAC": "LOCATION",
+                    "FAC": "LOCATION",
                     "ORG": "ORGANIZATION",
                     "DATE": "DATE_TIME", "TIME": "DATE_TIME",
                     "NORP": "NRP",
@@ -365,7 +365,8 @@ def get_analyzer():
                 "low_score_entity_names": [],
                 "labels_to_ignore": ["CARDINAL", "ORDINAL", "QUANTITY",
                                      "PERCENT", "MONEY", "LANGUAGE", "LAW",
-                                     "EVENT", "PRODUCT", "WORK_OF_ART"],
+                                     "EVENT", "PRODUCT", "WORK_OF_ART",
+                                     "GPE", "LOC"],
             },
         }).create_engine()
 
@@ -477,50 +478,15 @@ class BogusFactory:
         raise RuntimeError("could not generate a unique bogus value")
 
     def make(self, entity_type, original):
-        fake = self._fake
-        rng = fake.random
-        if entity_type == "PERSON":
-            bogus = self._unique(fake.name)
-        elif entity_type == "ORGANIZATION":
-            bogus = self._unique(fake.company)
-        elif entity_type == "LOCATION":
-            bogus = self._unique(fake.city)
-        elif entity_type == "NRP":
-            bogus = self._unique(fake.country)
-        elif entity_type == "EMAIL_ADDRESS":
-            bogus = self._unique(fake.email)
-        elif entity_type == "PHONE_NUMBER":
-            bogus = self._unique(fake.phone_number)
-        elif entity_type == "DATE_TIME":
-            bogus = self._unique(
-                lambda: fake.date_between("-15y", "today").strftime("%d %B %Y"))
-        elif entity_type == "MONEY_AMOUNT":
-            bogus = self._unique(
-                lambda: f"P {rng.randint(100_000, 9_999_999):,}")
-        elif entity_type == "MONEY_WORDS":
-            m = re.search(r"(pesos?|dollars?|rupees?|euros?|pounds?)\s*$",
-                          original, re.IGNORECASE)
-            currency = m.group(1).upper() if m else "PESOS"
-            bogus = self._unique(
-                lambda: f"{_int_to_words(rng.randint(100, 9999) * 1000)} {currency}")
-        elif entity_type == "PH_TIN":
-            bogus = self._unique(lambda: fake.numerify("###-###-###-###"))
-        elif entity_type == "REFERENCE_NUMBER":
-            bogus = self._unique(lambda: fake.numerify("No. ####-##"))
-        elif entity_type == "ORG_CODE":
-            def scrambled():
-                return "-".join(
-                    "".join(rng.choice("ABCDEFGHJKLMNPQRSTUVWXYZ")
-                            for _ in seg)
-                    for seg in original.split("-"))
-            bogus = self._unique(scrambled)
-        elif entity_type == "ORG_UNIT":
-            bogus = self._unique(
-                lambda: f"Region {rng.randint(1, 99)}{rng.choice('ABCDE')}")
-        else:
-            n = self._counters.get(entity_type, 0) + 1
-            self._counters[entity_type] = n
-            bogus = f"{entity_type}_{n:03d}"
+        n = self._counters.get(entity_type, 0) + 1
+        self._counters[entity_type] = n
+        bogus = f"{entity_type}_{n:03d}"
+        
+        if entity_type == "DATE_TIME":
+            m = re.search(r"\b((?:19|20)\d{2})\b", original)
+            if m:
+                bogus = f"{bogus} {m.group(1)}"
+                
         self._used.add(bogus.casefold())
         return bogus
 
