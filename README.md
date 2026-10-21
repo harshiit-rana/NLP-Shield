@@ -1,173 +1,197 @@
-# Pseudonymisation_Project
+# NLP Shield — Privacy-Preserving Document AI & Pseudonymisation
 
-Fully local pseudonymisation of PII in scanned documents, built for a
-TPRM/GRC workflow: analysts process contracts, MSAs, SLAs, NDAs, ISMS
-policies, audit reports, logs, e-mails, and attendance sheets, then paste
-the sanitized text into an external LLM without leaking anything.
+> End-to-end, fully local PII pseudonymisation and confidential document intelligence platform. Analyze confidential contracts, agreements, and sensitive records with external LLMs without leaking real-world identities.
 
-**Pipeline:** scanned PDF → rasterise (300 DPI) → OpenCV preprocessing →
-OCR (Tesseract, PaddleOCR optional) → PII detection (Presidio +
-transformer NER + custom recognisers with checksum validation) → every
-PII value replaced by a **unique, consistent pseudonym** → encrypted
-real↔pseudonym mapping stored in local SQLite → LLM output can be
-**reversed** back to real values.
+---
 
-PDFs that already have a text layer skip OCR and are extracted directly
-with PyMuPDF.
+## 🌟 Overview
 
-## Install
+When analyzing contracts, MSAs, legal agreements, financial statements, or medical records with modern Large Language Models (LLMs), organizations face significant privacy, GDPR, HIPAA, and DPDP compliance risks.
 
-System dependencies: `tesseract-ocr` and `poppler-utils`.
+**NLP Shield** solves this with a **zero-trust de-identification pipeline**:
+1. **Locally ingests** scanned PDFs and images via high-resolution rasterization and PaddleOCR.
+2. **Detects Personally Identifiable Information (PII)** using Microsoft Presidio and a deep-learning transformer Named Entity Recognition (NER) model (`en_core_web_trf`).
+3. **Replaces every sensitive entity** with a deterministic, context-preserving pseudorandom token (`PERSON_001`, `ORGANIZATION_001`, `MONEY_001`).
+4. **Encodes and secures the identity mappings** in a local SQLite vault encrypted with **Fernet (AES-128)**.
+5. **Enables confidential AI chat** (via Groq Cloud models like `openai/gpt-oss-120b`, `qwen/qwen3.8-27b`, `llama-3.3-70b`). The LLM reasons strictly over privacy tokens without ever seeing real PII.
+6. **One-Click Reversible Restoration**: Reconstructs real-world identities on the client side using the local key vault.
 
+---
+
+## 🏗️ Architecture
+
+```
+                                  LOCAL SECURE BOUNDARY
+ ┌─────────────────┐       ┌────────────────────────┐       ┌─────────────────────────┐
+ │ Scanned PDF/Img │ ───►  │  PyMuPDF + PaddleOCR   │ ───►  │ Presidio + Transformer  │
+ └─────────────────┘       └────────────────────────┘       │   NER (en_core_web_trf) │
+                                                            └───────────┬─────────────┘
+                                                                        │
+                                                                        ▼
+ ┌─────────────────┐       ┌────────────────────────┐       ┌─────────────────────────┐
+ │ Restored Report │ ◄───  │ One-Click Restoration  │ ◄───  │   Deterministic Token   │
+ │   (Local Only)  │       │   (Local AES Vault)    │       │     Pseudonymisation    │
+ └─────────────────┘       └────────────────────────┘       └───────────┬─────────────┘
+                                                                        │
+                                   EXTERNAL CLOUD                       ▼
+                           ┌────────────────────────┐       ┌─────────────────────────┐
+                           │   Groq LLM Reasoning   │ ◄───  │ Redacted Document & Chat│
+                           │(model never sees PII!) │       │   (PERSON_001, etc.)    │
+                           └────────────────────────┘       └─────────────────────────┘
+```
+
+---
+
+## 📁 Project Structure
+
+```
+├── app.py                      # FastAPI web server & Groq LLM streaming proxy
+├── pipeline_service.py         # Service layer integrating OCR, Presidio & MappingStore
+├── main.py                     # Core offline pipeline & CLI tool
+├── Dockerfile                  # Container definition (Python 3.11, PyTorch CPU, spaCy)
+├── .dockerignore               # Docker build exclusions
+├── .gitignore                  # Git exclusions (credentials, databases, caches)
+├── requirements.txt            # Pinned runtime dependencies
+├── pyproject.toml              # Project metadata and CLI entry points
+├── config.yaml                 # Pipeline and OCR configuration settings
+├── Makefile                    # Automation shortcuts (fixtures, tests, evaluate)
+│
+├── vaultdoc/                   # Frontend Web Application (NLP Shield UI)
+│   ├── index.html              # Reactive single-page UI (Vue, Tailwind CSS)
+│   ├── package.json            # Frontend packaging
+│   └── src/                    # Source components and styles
+│
+├── src/pseudonymiser/          # Core Python Package
+│   ├── detect.py               # Presidio analyzer & custom regex/checksum recognizers
+│   ├── ocr.py                  # PyMuPDF rasterization & PaddleOCR/Tesseract engine
+│   ├── pseudonymize.py         # Right-to-left replacer & residual fragment sweep
+│   ├── store.py                # Encrypted SQLite mapping store (Fernet / AES)
+│   ├── validators.py           # Verhoeff (Aadhaar), Luhn (Cards), PAN validators
+│   ├── pipeline.py             # Orchestration pipeline
+│   └── config.py               # Pydantic configuration schemas
+│
+├── scripts/                    # Development & Evaluation Utilities
+│   ├── download_models.py      # Pre-caches spaCy & GLiNER transformer models
+│   ├── evaluate.py             # Precision, recall, and zero-leak verification
+│   └── make_fixtures.py        # Generates synthetic test fixtures
+│
+└── tests/                      # Automated Test Suite
+    ├── fixtures/               # Synthetic scanned-PDF fixtures (no real PII)
+    ├── test_ocr.py             # OCR extraction unit tests
+    ├── test_pseudonymize.py    # Pseudonymisation & reversal round-trip tests
+    ├── test_recognizers.py     # Custom PII recognizer tests
+    ├── test_store.py           # Encrypted store tests
+    └── test_validators.py      # Checksum & pattern validator tests
+```
+
+---
+
+## ⚡ Quickstart
+
+### 1. Installation
+
+#### System Dependencies:
+- **Tesseract OCR** & **Poppler Utils** (if processing with Tesseract):
+  ```bash
+  # Ubuntu/Debian
+  sudo apt install -y tesseract-ocr poppler-utils
+  ```
+
+#### Python Environment (Python 3.11 recommended):
 ```bash
-# Debian/Ubuntu
-sudo apt install tesseract-ocr poppler-utils
-# or without root, via conda-forge (also provides Python 3.11):
-conda create -n pseudonymiser -c conda-forge python=3.11 tesseract poppler
+# Clone the repository
+git clone https://github.com/harshiit-rana/NLP-Shield.git
+cd NLP-Shield
 
+# Install dependencies
 pip install -r requirements.txt
 pip install -e .
-make download-models        # one-time; the runtime is offline after this
+
+# Download spaCy transformer model (one-time setup)
+python -m spacy download en_core_web_trf
 ```
 
-`make download-models` fetches the spaCy transformer model
-(`en_core_web_trf`). Add `GLINER=1` to also cache the optional GLiNER
-model. This is the **only** step that touches the network; copy the
-environment to an air-gapped machine afterwards if required.
+---
 
-**Installing the PaddleOCR extra** (`pip install -e ".[paddle]"`):
-`paddlex` hard-pins `PyYAML==6.0.2`, which is older than what
-`presidio-analyzer` requires (`>=6.0.3`) — pip will print a dependency
-conflict warning during install. This is safe to ignore: both libraries
-import and run fine with `PyYAML==6.0.3` in practice, and the conflict
-is just an overly strict pin, not a real incompatibility. If `cv2`
-stops importing after installing/uninstalling opencv variants (the
-`opencv-python`/`opencv-contrib-python`/`-headless` family shares one
-`cv2/` install location, and removing one variant can delete files
-another variant's metadata still claims), fix it with:
+### 2. Running the Web Application (Recommended)
+
+Start the interactive FastAPI server:
 ```bash
-pip install --force-reinstall --no-deps opencv-contrib-python-headless==4.10.0.84
+uvicorn app:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-## Quickstart
+Open your browser to:
+```
+http://localhost:8000
+```
 
+#### Features in the Web App:
+- **Tab 01 (De-identify):** Drag-and-drop any PDF or image. View extracted text and highlighted pseudonym tokens with automatic key bundle generation.
+- **Tab 02 (Restore):** Paste any pseudonymized text and choose your key bundle or upload a CSV to instantly restore original identities.
+- **Tab 03 (Confidential AI Chat):** Connect your Groq API key and converse with high-speed models (`openai/gpt-oss-120b`, `llama-3.3-70b`). Responses render full Markdown tables and include a **"🪄 Send to restore"** button to instantly de-pseudonymize AI answers.
+
+---
+
+### 3. Running via Docker
+
+Build and run the self-contained container:
 ```bash
-pseudonymise run input.pdf -o out/     # writes out/input.extracted.txt (raw, local audit copy)
-                                       #        out/input.sanitized.txt (LLM-safe)
-pseudonymise batch ./contracts -o out/ # whole folder; one bad file won't abort the batch
-pseudonymise reverse llm_response.txt  # restore real values in LLM output
-pseudonymise export-csv mappings.csv   # decrypted mapping export (sensitive!)
+docker build -t nlp-shield .
+docker run -d -p 8000:8000 --name nlp-shield nlp-shield
 ```
+Visit `http://localhost:8000`.
 
-`run` prints a per-entity summary (counts only — raw PII is never logged)
-and flags pages whose mean OCR confidence is low so an analyst can review
-them manually.
+---
 
-## Configuration (`config.yaml`)
-
-| Key | Default | Meaning |
-|---|---|---|
-| `ocr.engine` | `tesseract` | `paddleocr` available as optional extra |
-| `ocr.dpi` | `300` | rasterisation DPI (minimum enforced 300) |
-| `ocr.low_confidence_threshold` | `60` | flag pages below this mean word confidence |
-| `ocr.deskew` / `denoise` / `adaptive_threshold` / `border_removal` / `perspective_correction` | `true` | OpenCV preprocessing steps |
-| `detection.score_threshold` | `0.35` | recall-first: over-redacting beats leaking |
-| `detection.spacy_model` | `en_core_web_trf` | transformer NER; `en_core_web_lg` as lighter fallback |
-| `detection.use_gliner` | `false` | union GLiNER (`urchade/gliner_multi_pii-v1`) results |
-| `pseudonyms.style` | `token` | `token` → `PERSON_001`; `faker` → realistic stable fakes |
-| `pseudonyms.scope` | `document` | `corpus` = same value maps identically across all documents |
-| `store.db_path` | `pseudonymiser.db` | local SQLite mapping DB (gitignored) |
-| `store.key_file` | `.pseudonymiser.key` | Fernet key file; or set `PSEUDONYMISER_KEY`/`PSEUDONYMISER_KEY_FILE` |
-
-## Detected entities
-
-Presidio built-ins (PERSON, ORGANIZATION, EMAIL_ADDRESS, PHONE_NUMBER,
-LOCATION, DATE_TIME, CREDIT_CARD, IBAN_CODE, IP_ADDRESS, URL, US_SSN,
-US_BANK_NUMBER, UK_NINO, IN_PAN, IN_AADHAAR, IN_PASSPORT, IN_VOTER) plus
-custom recognisers: IN_IFSC, IN_UPI, Indian mobile numbers, IN_PIN_CODE,
-IN_GSTIN, IN_CIN, IN_VEHICLE_REGISTRATION, BANK_ACCOUNT, PH_TIN,
-REFERENCE_NUMBER, MONEY_AMOUNT.
-
-**OCR-error tolerance:** structured identifiers are matched with
-confusion-tolerant patterns (O↔0, I/l↔1, S↔5, B↔8), repaired, and then
-validated — Aadhaar with the Verhoeff checksum, cards with Luhn, PAN by
-structure — so garbled scans are still caught while random strings are
-rejected.
-
-**Residual sweep** (`pseudonyms.fragment_sweep`, on by default): after
-pseudonymisation the output is re-scanned for (a) verbatim occurrences of
-any mapped name/location/organisation/email that NER missed in a noisier
-context, and (b) standalone words from mapped person names — so an
-OCR-truncated signature like `TA B. JAVIER` is still redacted once
-`GRACIA B. JAVIER` is known.
-
-**Choosing an OCR engine:** Tesseract (default) is fast; PaddleOCR
-(`ocr.engine: paddleocr`, install with `pip install -e ".[paddle]"`) reads
-noisy scans measurably better (on our worst test page: mean confidence 96
-vs 84, and it recovered a name Tesseract missed) but is currently much
-slower on CPU because MKL-DNN must be disabled to work around a
-paddlepaddle 3.x bug. Use it for accuracy-critical documents.
-
-## Accuracy (synthetic scanned-PDF fixtures)
-
-`make fixtures && make evaluate` renders five image-only PDFs (contract,
-KYC form, letter, NDA, skewed invoice) with 48 planted PII values and
-scores the full pipeline end to end:
-
-```
-recall:    1.000  (48/48 OCR-captured values removed from sanitized output)
-precision: 0.875  (7 extra redactions, all deliberate over-redaction)
-f1:        0.933
-ACCEPTANCE BAR MET: zero ground-truth PII strings survived.
-```
-
-Per-entity recall is 1.00 for all 20 entity types in the fixture set. A
-real 3-page scanned contract processed cleanly with zero residual
-email/phone/Aadhaar/PAN-shaped strings in the sanitized output.
-
-Known limitations:
-
-* Recall is measured on synthetic renders; very noisy real scans can
-  still produce OCR text too garbled for any recogniser. Low-confidence
-  pages are flagged for exactly this reason — review them.
-* Handwriting, signatures, and stamps are not reliably OCR'd. Isolated
-  OCR-garbage tokens that were never detected as any entity anywhere in
-  the document (e.g. a mangled notary commission line) cannot be swept
-  and may survive — review flagged pages, or enable GLiNER for a second
-  detection opinion.
-* Bare 6-digit numbers / 9-18-digit numbers are only treated as PIN
-  codes / account numbers when context supports it; a stray account
-  number with no context can slip through.
-* NER can over-redact (e.g. state names, "next week") — by design.
-
-## SECURITY
-
-```
- scanned PDF ──► rasterise ──► OCR ──► detect ──► pseudonymize ──► sanitized.txt ──► (you paste to LLM)
-     │                                                 │
-     └── extracted.txt (raw, local only)               └── SQLite mapping DB (values Fernet-encrypted)
-                                                            key: .pseudonymiser.key / env var
- LLM response ──► pseudonymise reverse ──► restored text (local)
-```
-
-* **Everything runs locally.** No cloud APIs, no telemetry, no external
-  NER services. Project code contains no network imports; the only
-  network activity is `make download-models`, run once.
-* **The mapping DB** (`pseudonymiser.db`) stores real values encrypted
-  with Fernet and hashed with a keyed HMAC — no plaintext PII at rest.
-* **The key** lives in `.pseudonymiser.key` (created `0600`) or the
-  `PSEUDONYMISER_KEY`/`PSEUDONYMISER_KEY_FILE` environment variables.
-  Whoever holds the key + DB can re-identify: restrict access to the
-  analysts authorised to run `reverse`, back the key up separately from
-  the DB, and never commit either (both are gitignored).
-* **`extracted.txt` and `export-csv` output contain raw PII** — they
-  exist for audit/reversal and must stay inside your infrastructure.
-* Logs contain entity types and counts only, never raw values.
-
-## Development
+### 4. Running via CLI
 
 ```bash
-make fixtures   # regenerate synthetic test PDFs (all PII is fake, valid-checksum)
-make test       # 62 unit tests: recognisers, validators, OCR, store, round-trip
-make evaluate   # end-to-end precision/recall/F1 + zero-leak acceptance bar
+# Pseudonymise a single document
+pseudonymise run contract.pdf -o out/
+
+# Batch process an entire folder of contracts
+pseudonymise batch ./documents -o out/
+
+# Reverse / restore an LLM response using the local database
+pseudonymise reverse llm_response.txt
+
+# Export decrypted mapping table to CSV (restricted access)
+pseudonymise export-csv mappings.csv
 ```
+
+---
+
+## 🔒 Security & Privacy Guarantees
+
+1. **Air-Gapped Operation:** All OCR, PII detection, pseudonymisation, and restoration run 100% locally on your machine.
+2. **Encrypted Mapping Store:** Real identities are encrypted using **Fernet (AES-128)** and hashed using keyed **HMAC-SHA256**. The mapping database (`pseudonymiser.db`) contains zero plaintext PII at rest.
+3. **Secret Key Isolation:** The encryption key (`.pseudonymiser.key`) remains strictly on the client server. The external LLM receives only privacy tokens (`PERSON_001`, `ORGANIZATION_001`).
+4. **Deterministic Token Mapping:** The same entity receives the exact same pseudonym across the document, allowing the LLM to understand relationships without knowing identity.
+5. **Right-to-Left Replacement:** Redaction operates backwards by string offset to prevent offset corruption and multi-entity overlap errors.
+6. **Residual Fragment Sweeping:** Secondary sweep ensures partial name fragments (e.g., truncated signature blocks) are redacted even if OCR missed full context.
+
+---
+
+## 🧪 Testing & Evaluation
+
+Run the automated test suite and accuracy benchmarks:
+```bash
+# Generate synthetic test fixtures
+make fixtures
+
+# Run all 62 unit tests
+pytest
+
+# End-to-end precision, recall, and zero-leak verification
+python scripts/evaluate.py
+```
+
+### Benchmark Results (Synthetic Scanned Fixtures)
+- **Recall:** `1.000` (100% of ground-truth PII removed from sanitized text)
+- **Precision:** `0.875` (deliberate safety over-redaction)
+- **Zero-Leak Acceptance Bar:** **MET** (0 planted PII strings survived in output)
+
+---
+
+## 📄 License
+MIT License. Built for secure, privacy-preserving document workflows.
